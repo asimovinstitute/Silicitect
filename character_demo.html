@@ -135,66 +135,6 @@ var reinit = function() {
   model = initModel();
 }
 
-var saveModel = function() {
-  var out = {};
-  out['hidden_sizes'] = hidden_sizes;
-  out['generator'] = generator;
-  out['letter_size'] = letter_size;
-  var model_out = {};
-  for(var k in model) {
-    if(model.hasOwnProperty(k)) {
-      model_out[k] = model[k].toJSON();
-    }
-  }
-  out['model'] = model_out;
-  var solver_out = {};
-  solver_out['decay_rate'] = solver.decay_rate;
-  solver_out['smooth_eps'] = solver.smooth_eps;
-  step_cache_out = {};
-  for(var k in solver.step_cache) {
-    if(solver.step_cache.hasOwnProperty(k)) {
-      step_cache_out[k] = solver.step_cache[k].toJSON();
-    }
-  }
-  solver_out['step_cache'] = step_cache_out;
-  out['solver'] = solver_out;
-  out['letterToIndex'] = letterToIndex;
-  out['indexToLetter'] = indexToLetter;
-  out['vocab'] = vocab;
-  $("#tio").val(JSON.stringify(out));
-}
-
-var loadModel = function(j) {
-  hidden_sizes = j.hidden_sizes;
-  generator = j.generator;
-  letter_size = j.letter_size;
-  model = {};
-  for(var k in j.model) {
-    if(j.model.hasOwnProperty(k)) {
-      var matjson = j.model[k];
-      model[k] = new R.Mat(1,1);
-      model[k].fromJSON(matjson);
-    }
-  }
-  solver = new R.Solver(); // have to reinit the solver since model changed
-  solver.decay_rate = j.solver.decay_rate;
-  solver.smooth_eps = j.solver.smooth_eps;
-  solver.step_cache = {};
-  for(var k in j.solver.step_cache){
-      if(j.solver.step_cache.hasOwnProperty(k)){
-          var matjson = j.solver.step_cache[k];
-          solver.step_cache[k] = new R.Mat(1,1);
-          solver.step_cache[k].fromJSON(matjson);
-      }
-  }
-  letterToIndex = j['letterToIndex'];
-  indexToLetter = j['indexToLetter'];
-  vocab = j['vocab'];
-
-  // reinit these
-  ppl_list = [];
-  tick_iter = 0;
-}
 
 var forwardIndex = function(G, model, ix, prev) {
   var x = G.rowPluck(model['Wil'], ix);
@@ -314,34 +254,16 @@ var tick = function() {
 
   // evaluate now and then
   tick_iter += 1;
-  if(tick_iter % 50 === 0) {
+  if(tick_iter % 100 === 1) {
     // draw samples
     $('#samples').html('');
-    for(var q=0;q<5;q++) {
+    for(var q=0;q<10;q++) {
       var pred = predictSentence(model, true, sample_softmax_temperature);
       var pred_div = '<div class="apred">'+pred+'</div>'
       $('#samples').append(pred_div);
     }
   }
-  if(tick_iter % 10 === 0) {
-    // draw argmax prediction
-    $('#argmax').html('');
-    var pred = predictSentence(model, false);
-    var pred_div = '<div class="apred">'+pred+'</div>'
-    $('#argmax').append(pred_div);
-
-    // keep track of perplexity
-    $('#epoch').text('epoch: ' + (tick_iter/epoch_size).toFixed(2));
-    $('#ppl').text('perplexity: ' + cost_struct.ppl.toFixed(2));
-    $('#ticktime').text('forw/bwd time per example: ' + tick_time.toFixed(1) + 'ms');
-
-    if(tick_iter % 100 === 0) {
-      var median_ppl = median(ppl_list);
-      ppl_list = [];
-      pplGraph.add(tick_iter, median_ppl);
-      pplGraph.drawSelf(document.getElementById("pplgraph"));
-    }
-  }
+  
 }
 
 var gradCheck = function() {
@@ -377,51 +299,8 @@ var gradCheck = function() {
 var iid = null;
 $(function() {
 
-  // attach button handlers
-  $('#learn').click(function(){ 
-    reinit();
-    if(iid !== null) { clearInterval(iid); }
-    iid = setInterval(tick, 0); 
-  });
-  $('#stop').click(function(){ 
-    if(iid !== null) { clearInterval(iid); }
-    iid = null;
-  });
-  $("#resume").click(function(){
-    if(iid === null) {
-      iid = setInterval(tick, 0); 
-    }
-  });
-
-  $("#savemodel").click(saveModel);
-  $("#loadmodel").click(function(){
-    var j = JSON.parse($("#tio").val());
-    loadModel(j);
-  });
-
-  $("#loadpretrained").click(function(){
-    $.getJSON("lstm_100_model.json", function(data) {
-      pplGraph = new Rvis.Graph();
-      learning_rate = 0.0001;
-      reinit_learning_rate_slider();
-      loadModel(data);
-    });
-  });
-
-  $("#learn").click(); // simulate click on startup
-
-  //$('#gradcheck').click(gradCheck);
-
-  $("#temperature_slider").slider({
-    min: -1,
-    max: 1.05,
-    step: 0.05,
-    value: 0,
-    slide: function( event, ui ) {
-      sample_softmax_temperature = Math.pow(10, ui.value);
-      $("#temperature_text").text( sample_softmax_temperature.toFixed(2) );
-    }
-  });
+	reinit();
+	setInterval(tick, 0);
 });
 
 </script>
@@ -429,11 +308,7 @@ $(function() {
 
 <body>
 <div id="wrap">
-  
-    <button id="learn" class="abutton">learn/restart</button>
-    <button id="resume" class="abutton">resume</button>
-    <button id="stop" class="abutton">pause</button>
-    <textarea id="newnet" style="width:100%; height:200px;">
+    <textarea id="newnet" style="display: none;">
 
   // model parameters
   generator = 'lstm'; // can be 'rnn' or 'lstm'
@@ -443,57 +318,10 @@ $(function() {
   // optimization
   regc = 0.000001; // L2 regularization strength
   learning_rate = 0.01; // learning rate
-  clipval = 5.0; // clip gradients at this value
-    </textarea><br />
-    
-    <div id="status">
-
-      <div>
-        <div class="hh">Training stats:</div>
-        <div class="aslider">
-          <div class="slider_header">Learning rate: you want to anneal this over time if you're training for longer time.</div>
-          <div class="theslider" id="lr_slider"></div>
-          <div class="slider_value" id="lr_text"></div>
-        </div>
-
-        <canvas id="pplgraph"></canvas>
-        <div id="ticktime"></div>
-        <div id="gradclip"></div>
-        <div id="epoch"></div>
-        <div id="ppl"></div>
-
-        <div style="clear:both;"></div>
-      </div>
-
-      <div class="hh">Model samples:</div>
-      <div id="controls">
-        <div class="aslider">
-          <div class="slider_header">Softmax sample temperature: lower setting will generate more likely predictions, but you'll see more of the same common words again and again. Higher setting will generate less frequent words but you might see more spelling errors.</div>
-          <div class="theslider" id="temperature_slider"></div>
-          <div class="slider_value" id="temperature_text"></div>
-        </div>
-      </div>
-      <div id="samples"></div>
-      <div class="hh">Greedy argmax prediction:</div>
-      <div id="argmax"></div>
-    </div>
-    <div id="io">
-      <div class="hh">I/O save/load model JSON</div>
-
-      <button id="savemodel" class="abutton">save model</button>
-      <button id="loadmodel" class="abutton">load model</button>
-      <div>
-        You can save or load models with JSON using the textarea below.
-      </div>
-      <textarea style="width:100%; height:200px;" id="tio"></textarea>
-
-      <br>
-      <div class="hh">Pretrained model:</div>
-      You can also choose to load an example pretrained model with the button below to see what the predictions look like in later stages. The pretrained model is an LSTM with one layer of 100 units, trained for ~10 hours. After clicking button below you should see the perplexity plummet to about 3.0, and see the predictions become better.<br>
-      <button id="loadpretrained" class="abutton">load pretrained</button>
-
-    </div>
-    <textarea style="width:100%; height:200px;" id="ti">
+  clipval = 5.0; // clip gradients at this value -->
+    </textarea>
+	<div id="samples"></div>      
+    <textarea style="display: none;" id="ti">
 the company has, say, 6 months of runway
 or to put it more brutally, 6 months before they're out of business
 they expect to avoid that by raising more from investors
@@ -1926,7 +1754,6 @@ obviously you can sense prosperity in how well kept a place looks
 but there are different kinds of prosperity
 silicon valley doesn't look like boston, or new york, or la, or dc
     </textarea>
-  </div>
 </div>
 </body>
 </html>
