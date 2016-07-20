@@ -14,7 +14,7 @@ var reguliser = 1e-6;
 var learningRate = 0.01;
 var clipValue = 5.0;
 var generator = "lstm";
-var hiddenSizes = [20, 20];
+var hiddenSizes = [3, 3];
 var letterSize = 5;
 
 var epochSize = 0;
@@ -59,11 +59,65 @@ function init (e) {
 	solver = new Solver();
 	model = initModel();
 	
-	for (var a = 0; a < 3; a++) {
+	for (var a = 0; a < 1; a++) {
 		
 		pass();
 		
 	}
+	
+	// Art.doWrite(0, predictSentence(model, temperature));
+	
+}
+
+function predictSentence (model, temperature) {
+	
+	var graph = new Graph(false);
+	var sentence = "";
+	var log = 0;
+	var previous = {};
+	var forward = {};
+	
+	for (var a = 0; a < 5; a++) {
+		
+		var input = sentence.length == 0 ? 0 : letterToIndex[sentence.charAt(sentence.length - 1)];
+		
+		forward = forwardIndex(graph, model, input, previous);
+		previous = forward;
+		
+		for (var b = 0; b < forward.o.w.length; b++) {
+			
+			forward.o.w[b] /= temperature;
+			
+		}
+		
+		var probabilities = softmax(forward.o);
+		
+		var index = sampler(probabilities.w);
+		
+		if (index == 0) break;
+		
+		sentence += indexToLetter[index];
+		
+	}
+	
+	return sentence;
+	
+}
+
+function sampler (w) {
+	
+	var random = Math.random();
+	var sum = 0;
+	
+	for (var a = 0; a < w.length; a++) {
+		
+		sum += w[a];
+		
+		if (sum > random) return a;
+		
+	}
+	
+	return a.length - 1;
 	
 }
 
@@ -80,32 +134,31 @@ function pass () {
 
 function computeCost (model, sentence) {
 	
-	var n = sentence.length;
-	var graph = new Graph();
-	var log = 0.0;
-	var cost = 0.0;
+	var graph = new Graph(true);
+	var log = 0;
+	var cost = 0;
 	var previous = {};
 	var forward = {};
 	
-	for (var a = -1; a < n; a++) {
+	for (var a = -1; a < sentence.length; a++) {
 		
-		var source = a == -1 ? 0 : letterToIndex[sentence.charAt(a)];
-		var target = a == n - 1 ? 0 : letterToIndex[sentence.charAt(a + 1)];
+		var letter = a == -1 ? 0 : letterToIndex[sentence.charAt(a)];
+		var nextLetter = a == sentence.length - 1 ? 0 : letterToIndex[sentence.charAt(a + 1)];
 		
-		forward = forwardIndex(graph, model, source, previous);
+		forward = forwardIndex(graph, model, letter, previous);
 		previous = forward;
-		
+		break;
 		var probabilities = softmax(forward.o);
 		
-		log -= Math.log2(probabilities.w[target]);
-		cost -= Math.log(probabilities.w[target]);
+		log -= Math.log2(probabilities.w[nextLetter]);
+		cost -= Math.log(probabilities.w[nextLetter]);
 		
 		forward.o.dw = probabilities.w;
-		forward.o.dw[target] -= 1;
+		forward.o.dw[nextLetter] -= 1;
 		
 	}
 	
-	return {"graph":graph, "ppl":Math.pow(2, log / (n - 1)), "cost":cost};
+	return {"graph":graph, "ppl":Math.pow(2, log / (sentence.length - 1)), "cost":cost};
 	
 }
 
@@ -114,7 +167,7 @@ function forwardIndex (graph, model, index, previous) {
 	var x = graph.rowPluck(model["Wil"], index);
 	
 	if (generator == "lstm") return forwardLSTM(graph, model, hiddenSizes, x, previous);
-	else return forwardRNN(graph, model, hiddenSizes, x, previous);
+	if (generator == "rnn") return forwardRNN(graph, model, hiddenSizes, x, previous);
 	
 }
 
@@ -317,15 +370,15 @@ Art.ready = function () {
 		for (var a = 0; a < n * d; a++) {
 			
 			this.w[a] = base + range * Math.random();
-			this.dw[a] = this.w[a];
+			this.dw[a] = 0;
 			
 		}
 		
 	};
 	
-	Graph = function () {
+	Graph = function (needsBackprop) {
 		
-		this.needsBackprop = true;
+		this.needsBackprop = needsBackprop;
 		this.backprop = [];
 		
 	};
@@ -359,7 +412,7 @@ Art.ready = function () {
 			}
 			
 		}
-		
+		// console.log(JSON.stringify(out));
 		if (this.needsBackprop) {
 			
 			var backward = function () {
