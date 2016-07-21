@@ -14,7 +14,7 @@ var reguliser = 1e-6;
 var learningRate = 0.01;
 var clipValue = 5.0;
 var generator = "lstm";
-var hiddenSizes = [3, 3];
+var hiddenSizes = [20, 20];
 var letterSize = 5;
 
 var epochSize = 0;
@@ -59,13 +59,17 @@ function init (e) {
 	solver = new Solver();
 	model = initModel();
 	
-	for (var a = 0; a < 1; a++) {
+	for (var a = 0; a < 100; a++) {
 		
 		pass();
 		
+		if (a % 1 == 0) {
+			
+			Art.doWrite(0, predictSentence(model, temperature) + "\n");
+			
+		}
+		
 	}
-	
-	// Art.doWrite(0, predictSentence(model, temperature));
 	
 }
 
@@ -77,7 +81,7 @@ function predictSentence (model, temperature) {
 	var previous = {};
 	var forward = {};
 	
-	for (var a = 0; a < 5; a++) {
+	for (var a = 0; a < 50; a++) {
 		
 		var input = sentence.length == 0 ? 0 : letterToIndex[sentence.charAt(sentence.length - 1)];
 		
@@ -147,7 +151,7 @@ function computeCost (model, sentence) {
 		
 		forward = forwardIndex(graph, model, letter, previous);
 		previous = forward;
-		break;
+		
 		var probabilities = softmax(forward.o);
 		
 		log -= Math.log2(probabilities.w[nextLetter]);
@@ -164,14 +168,14 @@ function computeCost (model, sentence) {
 
 function forwardIndex (graph, model, index, previous) {
 	
-	var x = graph.rowPluck(model["Wil"], index);
+	var observation = graph.rowPluck(model["Wil"], index);
 	
-	if (generator == "lstm") return forwardLSTM(graph, model, hiddenSizes, x, previous);
-	if (generator == "rnn") return forwardRNN(graph, model, hiddenSizes, x, previous);
+	if (generator == "lstm") return forwardLSTM(graph, model, hiddenSizes, observation, previous);
+	if (generator == "rnn") return forwardRNN(graph, model, hiddenSizes, observation, previous);
 	
 }
 
-function forwardLSTM (graph, model, hiddenSizes, x, previous) {
+function forwardLSTM (graph, model, hiddenSizes, observation, previous) {
 	
 	var hiddenPrevious = [];
 	var cellPrevious = [];
@@ -197,7 +201,7 @@ function forwardLSTM (graph, model, hiddenSizes, x, previous) {
 	
 	for (var a = 0; a < hiddenSizes.length; a++) {
 		
-		var input = a == 0 ? x : hidden[a - 1];
+		var input = a == 0 ? observation : hidden[a - 1];
 		
 		var h0 = graph.multiply(model["Wix" + a], input);
 		var h1 = graph.multiply(model["Wih" + a], hiddenPrevious[a]);
@@ -240,7 +244,7 @@ function initModel () {
 		
 		for (var a = 0; a < hiddenSizes.length; a++) {
 			
-			var prevSize = a == 0 ? inputSize : hiddenSizes[a - 1];
+			var prevSize = a == 0 ? letterSize : hiddenSizes[a - 1];
 			
 			model["Wxh" + a] = new Matrix(hiddenSizes[a], prevSize, 0, 0.08);
 			model["Whh" + a] = new Matrix(hiddenSizes[a], hiddenSizes[a], 0, 0.08);
@@ -255,7 +259,7 @@ function initModel () {
 		
 		for (var a = 0; a < hiddenSizes.length; a++) {
 			
-			var prevSize = a == 0 ? inputSize : hiddenSizes[a - 1];
+			var prevSize = a == 0 ? letterSize : hiddenSizes[a - 1];
 			
 			model['Wix' + a] = new Matrix(hiddenSizes[a], prevSize, 0, 0.08);
 			model['Wih' + a] = new Matrix(hiddenSizes[a], hiddenSizes[a], 0, 0.08);
@@ -324,6 +328,8 @@ Art.ready = function () {
 	
 	Stecy.loadFile("input.txt", init);
 	
+	Art.doStyle(0, "whiteSpace", "pre");
+	
 };
 
 (function () {
@@ -340,7 +346,7 @@ Art.ready = function () {
 		
 		for (var a in model) {
 			
-			if (!this.lastWeights[a]) this.lastWeights[a] = new Matrix(model[a].n, model[a].d);
+			if (!this.lastWeights[a]) this.lastWeights[a] = new Matrix(model[a].n, model[a].d, 0, 0);
 			
 			var ma = model[a];
 			var mb = this.lastWeights[a];
@@ -349,7 +355,7 @@ Art.ready = function () {
 				
 				mb.w[b] = mb.w[b] * this.decay + (1 - this.decay) * ma.dw[b] * ma.dw[b];
 				
-				var clippedValue = Math.max(-clippedValue, Math.min(clipValue, ma.dw[b]));
+				var clippedValue = Math.max(-clipValue, Math.min(clipValue, ma.dw[b]));
 				
 				ma.w[b] += -learningRate * clippedValue / Math.sqrt(mb.w[b] + this.smoothing) - reguliser * ma.w[b];
 				ma.dw[b] = 0;
@@ -395,6 +401,8 @@ Art.ready = function () {
 	
 	Graph.prototype.multiply = function (ma, mb) {
 		
+		if (ma.d != mb.n) throw new Error("wrong dimensions");
+		
 		var out = new Matrix(ma.n, mb.d, 0, 0);
 		
 		for (var a = 0; a < ma.n; a++) {
@@ -412,7 +420,7 @@ Art.ready = function () {
 			}
 			
 		}
-		// console.log(JSON.stringify(out));
+		
 		if (this.needsBackprop) {
 			
 			var backward = function () {

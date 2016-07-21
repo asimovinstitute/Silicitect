@@ -360,7 +360,7 @@ var R = {}; // the Recurrent library
 		for (var d = 0; d < hidden_sizes.length; d++) { // loop over depths
 			var prev_size = d === 0 ? input_size : hidden_sizes[d - 1];
 			var hidden_size = hidden_sizes[d];
-
+			
 			// gates parameters
 			model['Wix' + d] = new RandMat(hidden_size, prev_size, 0, 0.08);
 			model['Wih' + d] = new RandMat(hidden_size, hidden_size, 0, 0.08);
@@ -389,7 +389,7 @@ var R = {}; // the Recurrent library
 		// x is 1D column vector with observation
 		// prev is a struct containing hidden and cell
 		// from previous iteration
-
+		console.log(model["Wix0"]);
 		if (typeof prev.h === 'undefined') {
 			var hidden_prevs = [];
 			var cell_prevs = [];
