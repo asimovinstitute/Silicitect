@@ -1,13 +1,14 @@
 // move away from sentence limited model
-// letter size is input chunk size?
 // remove start and end tokens
+// letter size is input chunk size?
+// vocab equals index to letter?
 // kill all function factories: rowPluck, matrix multiply in graph
 // move matrix operations to matrix class
 // add different cost functions than shannon entropy
 // restructure classes
 // optimise? extra matrix random method
 // split the whole backward thingy
-// getters and setters for matrices?
+// add text priming
 
 var temperature = 1.0;
 var reguliser = 1e-6;
@@ -59,13 +60,20 @@ function init (e) {
 	solver = new Solver();
 	model = initModel();
 	
-	for (var a = 0; a < 100; a++) {
+	for (var b = 0; b < 2; b++) {
 		
-		pass();
+		generator = !b ? "lstm" : "rnn";
 		
-		if (a % 1 == 0) {
+		solver = new Solver();
+		model = initModel();
+		
+		for (var a = 0; a < 100; a++) {
 			
-			Art.doWrite(0, predictSentence(model, temperature) + "\n");
+			pass();
+			
+			// Art.doWrite(0, predictSentence(model, temperature, 50) + "\n");
+			
+			if (a % 5 == 0) console.log(predictSentence(model, temperature, 50));
 			
 		}
 		
@@ -81,7 +89,7 @@ function predictSentence (model, temperature) {
 	var previous = {};
 	var forward = {};
 	
-	for (var a = 0; a < 50; a++) {
+	for (var a = 0; a < 200; a++) {
 		
 		var input = sentence.length == 0 ? 0 : letterToIndex[sentence.charAt(sentence.length - 1)];
 		
@@ -175,6 +183,44 @@ function forwardIndex (graph, model, index, previous) {
 	
 }
 
+function forwardRNN (graph, model, hiddenSizes, observation, previous) {
+	
+	var hiddenPrevious = [];
+	
+	if (previous.h) {
+		
+		hiddenPrevious = previous.h;
+		
+	} else {
+		
+		for (var a = 0; a < hiddenSizes.length; a++) {
+			
+			hiddenPrevious.push(new Matrix(hiddenSizes[a], 1, 0, 0));
+			
+		}
+		
+	}
+	
+	var hidden = [];
+	
+	for (var a = 0; a < hiddenSizes.length; a++) {
+		
+		var input = a == 0 ? observation : hidden[a - 1];
+		
+		var h0 = graph.multiply(model["Wxh" + a], input);
+		var h1 = graph.multiply(model["Whh" + a], hiddenPrevious[a]);
+		var hiddenValue = graph.rectifier(graph.add(graph.add(h0, h1), model["bhh" + a]));
+		
+		hidden.push(hiddenValue);
+		
+	}
+	
+	var output = graph.add(graph.multiply(model["Whd"], hidden[hidden.length - 1]), model["bd"]);
+	
+	return {"h":hidden, "o":output};
+	
+}
+
 function forwardLSTM (graph, model, hiddenSizes, observation, previous) {
 	
 	var hiddenPrevious = [];
@@ -217,7 +263,7 @@ function forwardLSTM (graph, model, hiddenSizes, observation, previous) {
 		
 		var h6 = graph.multiply(model["Wcx" + a], input);
 		var h7 = graph.multiply(model["Wch" + a], hiddenPrevious[a]);
-		var cellWrite = graph.sigmoid(graph.add(graph.add(h6, h7), model["bc" + a]));
+		var cellWrite = graph.hyperbolicTangent(graph.add(graph.add(h6, h7), model["bc" + a]));
 		
 		var retain = graph.feedlessMultiply(forgetGate, cellPrevious[a]);
 		var write = graph.feedlessMultiply(inputGate, cellWrite);
