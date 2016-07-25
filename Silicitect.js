@@ -477,9 +477,13 @@ Art.ready = function () {
 	
 	Graph.prototype.backward = function () {
 		
-		for (var a = this.backprop.length - 1; a > -1; a--) {
+		for (var a = this.backprop.length - 1; a > -1; a -= 2) {
 			
-			this.backprop[a]();
+			if (this.backprop[a].length == 1) this.backprop[a - 1](this.backprop[a][0]);
+			if (this.backprop[a].length == 2) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1]);
+			if (this.backprop[a].length == 3) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1], this.backprop[a][2]);
+			
+			// this.backprop[a - 2](this.backprop[a - 1], this.backprop[a]);
 			
 		}
 		
@@ -509,32 +513,32 @@ Art.ready = function () {
 		
 		if (this.needsBackprop) {
 			
-			var backward = function () {
-				
-				for (var a = 0; a < ma.n; a++) {
-					
-					for (var b = 0; b < mb.d; b++) {
-						
-						for (var c = 0; c < ma.d; c++) {
-							
-							ma.dw[ma.d * a + c] += mb.w[mb.d * c + b] * out.dw[mb.d * a + b];
-							mb.dw[mb.d * c + b] += ma.w[ma.d * a + c] * out.dw[mb.d * a + b];
-							
-						}
-						
-					}
-					
-				}
-				
-			};
-			
-			this.backprop.push(backward);
+			this.backprop.push(multiplyBackward, [ma, mb, out]);
 			
 		}
 		
 		return out;
 		
 	};
+	
+	function multiplyBackward (ma, mb, out) {
+		
+		for (var a = 0; a < ma.n; a++) {
+			
+			for (var b = 0; b < mb.d; b++) {
+				
+				for (var c = 0; c < ma.d; c++) {
+					
+					ma.dw[ma.d * a + c] += mb.w[mb.d * c + b] * out.dw[mb.d * a + b];
+					mb.dw[mb.d * c + b] += ma.w[ma.d * a + c] * out.dw[mb.d * a + b];
+					
+				}
+				
+			}
+			
+		}
+		
+	}
 	
 	Graph.prototype.feedlessMultiply = function (ma, mb) {
 		
@@ -548,24 +552,24 @@ Art.ready = function () {
 		
 		if (this.needsBackprop) {
 			
-			var backward = function () {
-				
-				for (var a = 0; a < ma.w.length; a++) {
-					
-					ma.dw[a] += mb.w[a] * out.dw[a];
-					mb.dw[a] += ma.w[a] * out.dw[a];
-					
-				}
-				
-			};
-			
-			this.backprop.push(backward);
+			this.backprop.push(feedlessMultiplyBackward, [ma, mb, out]);
 			
 		}
 		
 		return out;
 		
 	};
+	
+	function feedlessMultiplyBackward (ma, mb, out) {
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			ma.dw[a] += mb.w[a] * out.dw[a];
+			mb.dw[a] += ma.w[a] * out.dw[a];
+			
+		}
+		
+	}
 	
 	Graph.prototype.add = function (ma, mb) {
 		
@@ -579,24 +583,24 @@ Art.ready = function () {
 		
 		if (this.needsBackprop) {
 			
-			var backward = function () {
-				
-				for (var a = 0; a < ma.w.length; a++) {
-					
-					ma.dw[a] += out.dw[a];
-					mb.dw[a] += out.dw[a];
-					
-				}
-				
-			};
-			
-			this.backprop.push(backward);
+			this.backprop.push(addBackward, [ma, mb, out]);
 			
 		}
 		
 		return out;
 		
 	};
+	
+	function addBackward (ma, mb, out) {
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			ma.dw[a] += out.dw[a];
+			mb.dw[a] += out.dw[a];
+			
+		}
+		
+	}
 	
 	Graph.prototype.sigmoid = function (ma) {
 		
@@ -610,23 +614,23 @@ Art.ready = function () {
 		
 		if (this.needsBackprop) {
 			
-			var backward = function () {
-				
-				for (var a = 0; a < ma.w.length; a++) {
-					
-					ma.dw[a] += out.w[a] * (1 - out.w[a]) * out.dw[a];
-					
-				}
-				
-			};
-			
-			this.backprop.push(backward);
+			this.backprop.push(sigmoidBackward, [ma, out]);
 			
 		}
 		
 		return out;
 		
 	};
+	
+	function sigmoidBackward (ma, out) {
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			ma.dw[a] += out.w[a] * (1 - out.w[a]) * out.dw[a];
+			
+		}
+		
+	}
 	
 	Graph.prototype.rectifier = function (ma) {
 		
@@ -640,23 +644,23 @@ Art.ready = function () {
 		
 		if (this.needsBackprop) {
 			
-			var backward = function () {
-				
-				for (var a = 0; a < ma.w.length; a++) {
-					
-					ma.dw[a] += ma.w[a] > 0 ? out.dw[a] : 0;
-					
-				}
-				
-			};
-			
-			this.backprop.push(backward);
+			this.backprop.push(rectifierBackward, [ma, out]);
 			
 		}
 		
 		return out;
 		
 	};
+	
+	function rectifierBackward (ma, out) {
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			ma.dw[a] += ma.w[a] > 0 ? out.dw[a] : 0;
+			
+		}
+		
+	}
 	
 	Graph.prototype.hyperbolicTangent = function (ma) {
 		
@@ -670,23 +674,23 @@ Art.ready = function () {
 		
 		if (this.needsBackprop) {
 			
-			var backward = function () {
-				
-				for (var a = 0; a < ma.w.length; a++) {
-					
-					ma.dw[a] += (1 - out.w[a] * out.w[a]) * out.dw[a];
-					
-				}
-				
-			};
-			
-			this.backprop.push(backward);
+			this.backprop.push(hyperbolicTangentBackward, [ma, out]);
 			
 		}
 		
 		return out;
 		
 	};
+	
+	function hyperbolicTangentBackward (ma, out) {
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			ma.dw[a] += (1 - out.w[a] * out.w[a]) * out.dw[a];
+			
+		}
+		
+	}
 	
 	Graph.prototype.rowPluck = function (ma, row) {
 		
@@ -700,22 +704,22 @@ Art.ready = function () {
 		
 		if (this.needsBackprop) {
 			
-			var backward = function () {
-				
-				for (var a = 0; a < ma.d; a++) {
-					
-					ma.dw[ma.d * row + a] += out.dw[a];
-					
-				}
-				
-			};
-			
-			this.backprop.push(backward);
+			this.backprop.push(rowPluckBackward, [ma, out, row]);
 			
 		}
 		
 		return out;
 		
 	};
+	
+	function rowPluckBackward (ma, out, row) {
+		
+		for (var a = 0; a < ma.d; a++) {
+			
+			ma.dw[ma.d * row + a] += out.dw[a];
+			
+		}
+		
+	}
 	
 })();
