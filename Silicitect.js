@@ -2,7 +2,6 @@
 // reuse memory
 // dynamic interrupts
 // save/loading of models
-// kill all function factories: rowPluck, matrix multiply in graph
 // move matrix operations to matrix class
 // add different cost functions than shannon entropy
 // restructure classes
@@ -11,10 +10,10 @@
 
 var temperature = 1.0;
 var reguliser = 0.000001;
-var learningRate = 0.02;
+var learningRate = 0.01;
 var clipValue = 5.0;
-var hiddenSizes = [5, 5];
-var letterEmbedSize = 5;
+var hiddenSizes = [12];
+var letterEmbedSize = 3;
 var decayRate = 0.97;
 
 var text = "";
@@ -24,9 +23,10 @@ var letterToIndex = {};
 var indexToLetter = [];
 var model = {};
 var lastWeights = {};
-var characterSet = "predefined";
+var characterSet = "analyse";
 
-var characters = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ⁄™‹›ﬁﬂ‡°·—±≈çÇ√-=[];'\,.\\/`~µ≤≥„‰◊ˆ˜¯˘¿—⁄\n\t1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+var characters = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ⁄™‹›ﬁﬂ‡°·—±≈çÇ√-=[];',.\\/`~µ≤≥„‰◊ˆ˜¯˘¿—⁄\n\t" + 
+			"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 function init (e) {
 	
@@ -76,39 +76,16 @@ function init (e) {
 		
 	}
 	
-	inputSize = indexToLetter.length + 1;
-	outputSize = indexToLetter.length + 1;
+	inputSize = indexToLetter.length;
+	outputSize = indexToLetter.length;
 	
 	initModel("lstm");
 	
-	var sampleInterval = 50;
-	var startTime = new Date();
-	var averageTime = 0;
-	
-	for (var a = 0; a < 2000; a++) {
-		
-		pass(20);
-		
-		// Art.doWrite(0, ask(50));
-		
-		// console.log(a + 1, ask(50));
-		if (a % sampleInterval == sampleInterval - 1) {
-			
-			averageTime += new Date() - startTime;
-			
-			console.log(a + 1, new Date() - startTime, ask(50, ""));
-			
-			startTime = new Date();
-			
-		}
-		
-	}
-	
-	console.log(averageTime / (a / sampleInterval));
+	batch(3000, 15, 200);
 	
 }
 
-function solve () {
+function updateWeights () {
 	
 	for (var a in model) {
 		
@@ -132,14 +109,38 @@ function solve () {
 	
 }
 
-function pass (batchSize) {
+function batch (iterations, batchSize, sampleInterval) {
 	
-	var sentence = text.substr(Math.floor(Math.random() * (text.length - batchSize)), batchSize);
-	var cost = computeCost(sentence);
+	var startTime = new Date();
+	var averageTime = 0;
+	var averageLoss = 0;
+	var sentence = "";
 	
-	cost.graph.backward();
+	for (var a = 0; a < iterations; a++) {
+		
+		sentence = text.substr(Math.floor(Math.random() * (text.length - batchSize)), batchSize);
+		
+		averageLoss += train(sentence);
+		
+		updateWeights();
+		
+		// Art.doWrite(0, ask(50));
+		
+		// console.log(a + 1, ask(50));
+		if (a % sampleInterval == sampleInterval - 1) {
+			
+			averageTime += new Date() - startTime;
+			
+			console.log(a + 1, (averageLoss / sampleInterval).toFixed(2), (new Date() - startTime) + "ms", ask(50, ""));
+			
+			averageLoss = 0;
+			startTime = new Date();
+			
+		}
+		
+	}
 	
-	solve();
+	console.log("Done training, average: " + Math.round(averageTime / (a / sampleInterval)) + "ms");
 	
 }
 
@@ -162,9 +163,9 @@ function ask (length, prime) {
 	
 	for (var a = 0; a < length; a++) {
 		
-		var letter = sentence.length == 0 ? 0 : letterToIndex[sentence.charAt(sentence.length - 1)];
+		var inputLetter = sentence.length == 0 ? 0 : letterToIndex[sentence.charAt(sentence.length - 1)];
 		
-		forward = forwardLSTM(graph, letter, previous);
+		forward = forwardLSTM(graph, inputLetter, previous);
 		previous = forward;
 		
 		for (var b = 0; b < forward.o.w.length; b++) {
@@ -184,15 +185,14 @@ function ask (length, prime) {
 	
 }
 
-function computeCost (sentence) {
+function train (sentence) {
 	
 	var graph = new Graph(true);
-	var log = 0;
 	var cost = 0;
 	var previous = {};
 	var forward = {};
 	
-	for (var a = -1; a < sentence.length; a++) {
+	for (var a = -1; a < sentence.length - 1; a++) {
 		
 		var letter = a == -1 ? 0 : letterToIndex[sentence.charAt(a)];
 		var nextLetter = a == sentence.length - 1 ? 0 : letterToIndex[sentence.charAt(a + 1)];
@@ -209,7 +209,6 @@ function computeCost (sentence) {
 		
 		var probabilities = softmax(forward.o);
 		
-		log -= Math.log2(probabilities.w[nextLetter]);
 		cost -= Math.log(probabilities.w[nextLetter]);
 		
 		forward.o.dw = probabilities.w;
@@ -217,7 +216,9 @@ function computeCost (sentence) {
 		
 	}
 	
-	return {"graph":graph, "ppl":Math.pow(2, log / (sentence.length - 1)), "cost":cost};
+	graph.backward();
+	
+	return cost;
 	
 }
 
@@ -434,7 +435,6 @@ Art.ready = function () {
 };
 
 (function () {
-	
 	
 	Matrix = function (n, d) {
 		
