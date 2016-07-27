@@ -12,7 +12,7 @@ var temperature = 1.0;
 var reguliser = 0.000001;
 var learningRate = 0.01;
 var clipValue = 5.0;
-var hiddenSizes = [12];
+var hiddenSizes = [10];
 var letterEmbedSize = 3;
 var decayRate = 0.97;
 
@@ -23,6 +23,8 @@ var letterToIndex = {};
 var indexToLetter = [];
 var model = {};
 var lastWeights = {};
+var recordBackprop = false;
+var backprop = [];
 var characterSet = "analyse";
 
 var characters = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ⁄™‹›ﬁﬂ‡°·—±≈çÇ√-=[];',.\\/`~µ≤≥„‰◊ˆ˜¯˘¿—⁄\n\t" + 
@@ -120,15 +122,11 @@ function batch (iterations, batchSize, sampleInterval) {
 		
 		averageLoss += train(sentence);
 		
-		updateWeights();
-		
-		// Art.doWrite(0, ask(50));
-		
-		// console.log(a + 1, ask(50));
 		if (a % sampleInterval == sampleInterval - 1) {
 			
 			averageTime += new Date() - startTime;
 			
+			// Art.doWrite(0, a + 1 + "\t" + (averageLoss / sampleInterval).toFixed(2) + "\t" + (new Date() - startTime) + "ms\t" + ask(50, "") + "\n");
 			console.log(a + 1, (averageLoss / sampleInterval).toFixed(2), (new Date() - startTime) + "ms", ask(50, ""));
 			
 			averageLoss = 0;
@@ -138,13 +136,15 @@ function batch (iterations, batchSize, sampleInterval) {
 		
 	}
 	
+	// Art.doWrite(0, "Done training, average: " + Math.round(averageTime / (a / sampleInterval)) + "ms");
 	console.log("Done training, average: " + Math.round(averageTime / (a / sampleInterval)) + "ms");
 	
 }
 
 function ask (length, prime) {
 	
-	var graph = new Graph(false);
+	recordBackprop = false;
+	
 	var sentence = prime;
 	var log = 0;
 	var previous = {};
@@ -154,7 +154,7 @@ function ask (length, prime) {
 		
 		var letter = letterToIndex[prime.charAt(a)];
 		
-		forward = forwardLSTM(graph, letter, previous);
+		forward = forwardLSTM(letter, previous);
 		previous = forward;
 		
 	}
@@ -163,7 +163,7 @@ function ask (length, prime) {
 		
 		var inputLetter = sentence.length == 0 ? 0 : letterToIndex[sentence.charAt(sentence.length - 1)];
 		
-		forward = forwardLSTM(graph, inputLetter, previous);
+		forward = forwardLSTM(inputLetter, previous);
 		previous = forward;
 		
 		for (var b = 0; b < forward.o.w.length; b++) {
@@ -185,8 +185,10 @@ function ask (length, prime) {
 
 function train (sentence) {
 	
-	var graph = new Graph(true);
-	var cost = 0;
+	recordBackprop = true;
+	backprop = [];
+	
+	var loss = 0;
 	var previous = {};
 	var forward = {};
 	
@@ -202,27 +204,29 @@ function train (sentence) {
 			
 		}
 		
-		forward = forwardLSTM(graph, letter, previous);
+		forward = forwardLSTM(letter, previous);
 		previous = forward;
 		
 		var probabilities = softmax(forward.o);
 		
-		cost -= Math.log(probabilities.w[nextLetter]);
+		loss -= Math.log(probabilities.w[nextLetter]);
 		
 		forward.o.dw = probabilities.w;
 		forward.o.dw[nextLetter] -= 1;
 		
 	}
 	
-	graph.backward();
+	backward();
 	
-	return cost;
+	updateWeights();
+	
+	return loss;
 	
 }
 
 function forwardRNN (letter, previous) {
 	
-	var observation = graph.rowPluck(model["Wil"], letter);
+	var observation = rowPluck(model["Wil"], letter);
 	var hiddenPrevious = [];
 	
 	if (previous.h) {
@@ -245,23 +249,23 @@ function forwardRNN (letter, previous) {
 		
 		var input = a == 0 ? observation : hidden[a - 1];
 		
-		var h0 = graph.multiply(model["Wxh" + a], input);
-		var h1 = graph.multiply(model["Whh" + a], hiddenPrevious[a]);
-		var hiddenValue = graph.rectifier(graph.add(graph.add(h0, h1), model["bhh" + a]));
+		var h0 = multiply(model["Wxh" + a], input);
+		var h1 = multiply(model["Whh" + a], hiddenPrevious[a]);
+		var hiddenValue = rectifier(add(add(h0, h1), model["bhh" + a]));
 		
 		hidden.push(hiddenValue);
 		
 	}
 	
-	var output = graph.add(graph.multiply(model["Whd"], hidden[hidden.length - 1]), model["bd"]);
+	var output = add(multiply(model["Whd"], hidden[hidden.length - 1]), model["bd"]);
 	
 	return {"h":hidden, "o":output};
 	
 }
 
-function forwardLSTM (graph, letter, previous) {
+function forwardLSTM (letter, previous) {
 	
-	var observation = graph.rowPluck(model["Wil"], letter);
+	var observation = rowPluck(model["Wil"], letter);
 	var hiddenPrevious = [];
 	var cellPrevious = [];
 	
@@ -288,34 +292,34 @@ function forwardLSTM (graph, letter, previous) {
 		
 		var input = a == 0 ? observation : hidden[a - 1];
 		
-		var h0 = graph.multiply(model["Wix" + a], input);
-		var h1 = graph.multiply(model["Wih" + a], hiddenPrevious[a]);
-		var inputGate = graph.sigmoid(graph.add(graph.add(h0, h1), model["bi" + a]));
+		var h0 = multiply(model["Wix" + a], input);
+		var h1 = multiply(model["Wih" + a], hiddenPrevious[a]);
+		var inputGate = sigmoid(add(add(h0, h1), model["bi" + a]));
 		
-		var h2 = graph.multiply(model["Wfx" + a], input);
-		var h3 = graph.multiply(model["Wfh" + a], hiddenPrevious[a]);
-		var forgetGate = graph.sigmoid(graph.add(graph.add(h2, h3), model["bf" + a]));
+		var h2 = multiply(model["Wfx" + a], input);
+		var h3 = multiply(model["Wfh" + a], hiddenPrevious[a]);
+		var forgetGate = sigmoid(add(add(h2, h3), model["bf" + a]));
 		
-		var h4 = graph.multiply(model["Wox" + a], input);
-		var h5 = graph.multiply(model["Woh" + a], hiddenPrevious[a]);
-		var outputGate = graph.sigmoid(graph.add(graph.add(h4, h5), model["bo" + a]));
+		var h4 = multiply(model["Wox" + a], input);
+		var h5 = multiply(model["Woh" + a], hiddenPrevious[a]);
+		var outputGate = sigmoid(add(add(h4, h5), model["bo" + a]));
 		
-		var h6 = graph.multiply(model["Wcx" + a], input);
-		var h7 = graph.multiply(model["Wch" + a], hiddenPrevious[a]);
-		var cellWrite = graph.hyperbolicTangent(graph.add(graph.add(h6, h7), model["bc" + a]));
+		var h6 = multiply(model["Wcx" + a], input);
+		var h7 = multiply(model["Wch" + a], hiddenPrevious[a]);
+		var cellWrite = hyperbolicTangent(add(add(h6, h7), model["bc" + a]));
 		
-		var retain = graph.feedlessMultiply(forgetGate, cellPrevious[a]);
-		var write = graph.feedlessMultiply(inputGate, cellWrite);
+		var retain = feedlessMultiply(forgetGate, cellPrevious[a]);
+		var write = feedlessMultiply(inputGate, cellWrite);
 		
-		var cellValue = graph.add(retain, write);
-		var hiddenValue = graph.feedlessMultiply(outputGate, graph.hyperbolicTangent(cellValue));
+		var cellValue = add(retain, write);
+		var hiddenValue = feedlessMultiply(outputGate, hyperbolicTangent(cellValue));
 		
 		hidden.push(hiddenValue);
 		cell.push(cellValue);
 		
 	}
 	
-	var output = graph.add(graph.multiply(model["Whd"], hidden[hidden.length - 1]), model["bd"]);
+	var output = add(multiply(model["Whd"], hidden[hidden.length - 1]), model["bd"]);
 	
 	return {"h":hidden, "c":cell, "o":output};
 	
@@ -323,7 +327,7 @@ function forwardLSTM (graph, letter, previous) {
 
 function initModel (generator) {
 	
-	model = {"Wil":new RandomMatrix(inputSize, letterEmbedSize, 0, 0.08)};
+	model = {"Wil":new Matrix(inputSize, letterEmbedSize).randomise(0, 0.08)};
 	
 	if (generator == "rnn") {
 		
@@ -331,13 +335,13 @@ function initModel (generator) {
 			
 			var prevSize = a == 0 ? letterEmbedSize : hiddenSizes[a - 1];
 			
-			model["Wxh" + a] = new RandomMatrix(hiddenSizes[a], prevSize, 0, 0.08);
-			model["Whh" + a] = new RandomMatrix(hiddenSizes[a], hiddenSizes[a], 0, 0.08);
+			model["Wxh" + a] = new Matrix(hiddenSizes[a], prevSize).randomise(0, 0.08);
+			model["Whh" + a] = new Matrix(hiddenSizes[a], hiddenSizes[a]).randomise(0, 0.08);
 			model["bhh" + a] = new Matrix(hiddenSizes[a], 1);
 			
 		}
 		
-		model["Whd"] = new RandomMatrix(outputSize, hiddenSizes[hiddenSizes.length - 1], 0, 0.08);
+		model["Whd"] = new Matrix(outputSize, hiddenSizes[hiddenSizes.length - 1]).randomise(0, 0.08);
 		model["bd"] = new Matrix(outputSize, 1);
 		
 	} else if (generator == "lstm") {
@@ -346,25 +350,25 @@ function initModel (generator) {
 			
 			var prevSize = a == 0 ? letterEmbedSize : hiddenSizes[a - 1];
 			
-			model['Wix' + a] = new RandomMatrix(hiddenSizes[a], prevSize, 0, 0.08);
-			model['Wih' + a] = new RandomMatrix(hiddenSizes[a], hiddenSizes[a], 0, 0.08);
+			model['Wix' + a] = new Matrix(hiddenSizes[a], prevSize).randomise(0, 0.08);
+			model['Wih' + a] = new Matrix(hiddenSizes[a], hiddenSizes[a]).randomise(0, 0.08);
 			model['bi' + a] = new Matrix(hiddenSizes[a], 1);
 			
-			model['Wfx' + a] = new RandomMatrix(hiddenSizes[a], prevSize, 0, 0.08);
-			model['Wfh' + a] = new RandomMatrix(hiddenSizes[a], hiddenSizes[a], 0, 0.08);
+			model['Wfx' + a] = new Matrix(hiddenSizes[a], prevSize).randomise(0, 0.08);
+			model['Wfh' + a] = new Matrix(hiddenSizes[a], hiddenSizes[a]).randomise(0, 0.08);
 			model['bf' + a] = new Matrix(hiddenSizes[a], 1);
 			
-			model['Wox' + a] = new RandomMatrix(hiddenSizes[a], prevSize, 0, 0.08);
-			model['Woh' + a] = new RandomMatrix(hiddenSizes[a], hiddenSizes[a], 0, 0.08);
+			model['Wox' + a] = new Matrix(hiddenSizes[a], prevSize).randomise(0, 0.08);
+			model['Woh' + a] = new Matrix(hiddenSizes[a], hiddenSizes[a]).randomise(0, 0.08);
 			model['bo' + a] = new Matrix(hiddenSizes[a], 1);
 			
-			model['Wcx' + a] = new RandomMatrix(hiddenSizes[a], prevSize, 0, 0.08);
-			model['Wch' + a] = new RandomMatrix(hiddenSizes[a], hiddenSizes[a], 0, 0.08);
+			model['Wcx' + a] = new Matrix(hiddenSizes[a], prevSize).randomise(0, 0.08);
+			model['Wch' + a] = new Matrix(hiddenSizes[a], hiddenSizes[a]).randomise(0, 0.08);
 			model['bc' + a] = new Matrix(hiddenSizes[a], 1);
 			
 		}
 		
-		model["Whd"] = new RandomMatrix(outputSize, hiddenSizes[hiddenSizes.length - 1], 0, 0.08);
+		model["Whd"] = new Matrix(outputSize, hiddenSizes[hiddenSizes.length - 1]).randomise(0, 0.08);
 		model["bd"] = new Matrix(outputSize, 1);
 		
 	}
@@ -428,7 +432,7 @@ Art.ready = function () {
 	
 	Stecy.loadFile("input/simple.txt", init);
 	
-	Art.doStyle(0, "whiteSpace", "pre");
+	Art.doStyle(0, "whiteSpace", "pre", "font", "20px monospace", "tabSize", "6");
 	
 };
 
@@ -450,274 +454,261 @@ Art.ready = function () {
 		
 	};
 	
-	RandomMatrix = function (n, d, base, range) {
+	Matrix.prototype.randomise = function (base, range) {
 		
-		this.n = n;
-		this.d = d;
-		this.w = [];
-		this.dw = [];
-		
-		for (var a = 0; a < n * d; a++) {
+		for (var a = 0; a < this.n * this.d; a++) {
 			
 			this.w[a] = base + range * Math.random();
-			this.dw[a] = 0;
 			
 		}
+		
+		return this;
 		
 	};
-	
-	Graph = function (needsBackprop) {
-		
-		this.needsBackprop = needsBackprop;
-		this.backprop = [];
-		
-	};
-	
-	Graph.prototype.backward = function () {
-		
-		for (var a = this.backprop.length - 1; a > -1; a -= 2) {
-			
-			if (this.backprop[a].length == 1) this.backprop[a - 1](this.backprop[a][0]);
-			if (this.backprop[a].length == 2) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1]);
-			if (this.backprop[a].length == 3) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1], this.backprop[a][2]);
-			
-			// this.backprop[a - 2](this.backprop[a - 1], this.backprop[a]);
-			
-		}
-		
-	};
-	
-	Graph.prototype.multiply = function (ma, mb) {
-		
-		if (ma.d != mb.n) throw new Error("wrong dimensions");
-		
-		var out = new Matrix(ma.n, mb.d);
-		
-		for (var a = 0; a < ma.n; a++) {
-			
-			for (var b = 0; b < mb.d; b++) {
-				
-				out.w[mb.d * a + b] = 0;
-				
-				for (var c = 0; c < ma.d; c++) {
-					
-					out.w[mb.d * a + b] += ma.w[ma.d * a + c] * mb.w[mb.d * c + b];
-					
-				}
-				
-			}
-			
-		}
-		
-		if (this.needsBackprop) {
-			
-			this.backprop.push(multiplyBackward, [ma, mb, out]);
-			
-		}
-		
-		return out;
-		
-	};
-	
-	function multiplyBackward (ma, mb, out) {
-		
-		for (var a = 0; a < ma.n; a++) {
-			
-			for (var b = 0; b < mb.d; b++) {
-				
-				for (var c = 0; c < ma.d; c++) {
-					
-					ma.dw[ma.d * a + c] += mb.w[mb.d * c + b] * out.dw[mb.d * a + b];
-					mb.dw[mb.d * c + b] += ma.w[ma.d * a + c] * out.dw[mb.d * a + b];
-					
-				}
-				
-			}
-			
-		}
-		
-	}
-	
-	Graph.prototype.feedlessMultiply = function (ma, mb) {
-		
-		var out = new Matrix(ma.n, ma.d);
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			out.w[a] = ma.w[a] * mb.w[a];
-			
-		}
-		
-		if (this.needsBackprop) {
-			
-			this.backprop.push(feedlessMultiplyBackward, [ma, mb, out]);
-			
-		}
-		
-		return out;
-		
-	};
-	
-	function feedlessMultiplyBackward (ma, mb, out) {
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			ma.dw[a] += mb.w[a] * out.dw[a];
-			mb.dw[a] += ma.w[a] * out.dw[a];
-			
-		}
-		
-	}
-	
-	Graph.prototype.add = function (ma, mb) {
-		
-		var out = new Matrix(ma.n, ma.d);
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			out.w[a] = ma.w[a] + mb.w[a];
-			
-		}
-		
-		if (this.needsBackprop) {
-			
-			this.backprop.push(addBackward, [ma, mb, out]);
-			
-		}
-		
-		return out;
-		
-	};
-	
-	function addBackward (ma, mb, out) {
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			ma.dw[a] += out.dw[a];
-			mb.dw[a] += out.dw[a];
-			
-		}
-		
-	}
-	
-	Graph.prototype.sigmoid = function (ma) {
-		
-		var out = new Matrix(ma.n, ma.d);
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			out.w[a] = 1 / (1 + Math.exp(-ma.w[a]));
-			
-		}
-		
-		if (this.needsBackprop) {
-			
-			this.backprop.push(sigmoidBackward, [ma, out]);
-			
-		}
-		
-		return out;
-		
-	};
-	
-	function sigmoidBackward (ma, out) {
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			ma.dw[a] += out.w[a] * (1 - out.w[a]) * out.dw[a];
-			
-		}
-		
-	}
-	
-	Graph.prototype.rectifier = function (ma) {
-		
-		var out = new Matrix(ma.n, ma.d);
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			out.w[a] = Math.max(0, ma.w[a]);
-			
-		}
-		
-		if (this.needsBackprop) {
-			
-			this.backprop.push(rectifierBackward, [ma, out]);
-			
-		}
-		
-		return out;
-		
-	};
-	
-	function rectifierBackward (ma, out) {
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			ma.dw[a] += ma.w[a] > 0 ? out.dw[a] : 0;
-			
-		}
-		
-	}
-	
-	Graph.prototype.hyperbolicTangent = function (ma) {
-		
-		var out = new Matrix(ma.n, ma.d);
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			out.w[a] = Math.tanh(ma.w[a]);
-			
-		}
-		
-		if (this.needsBackprop) {
-			
-			this.backprop.push(hyperbolicTangentBackward, [ma, out]);
-			
-		}
-		
-		return out;
-		
-	};
-	
-	function hyperbolicTangentBackward (ma, out) {
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			ma.dw[a] += (1 - out.w[a] * out.w[a]) * out.dw[a];
-			
-		}
-		
-	}
-	
-	Graph.prototype.rowPluck = function (ma, row) {
-		
-		var out = new Matrix(ma.d, 1);
-		
-		for (var a = 0; a < ma.d; a++) {
-			
-			out.w[a] = ma.w[ma.d * row + a];
-			
-		}
-		
-		if (this.needsBackprop) {
-			
-			this.backprop.push(rowPluckBackward, [ma, out, row]);
-			
-		}
-		
-		return out;
-		
-	};
-	
-	function rowPluckBackward (ma, out, row) {
-		
-		for (var a = 0; a < ma.d; a++) {
-			
-			ma.dw[ma.d * row + a] += out.dw[a];
-			
-		}
-		
-	}
 	
 })();
+
+function backward () {
+	
+	for (var a = backprop.length - 1; a > -1; a -= 2) {
+		
+		if (backprop[a].length == 1) backprop[a - 1](backprop[a][0]);
+		if (backprop[a].length == 2) backprop[a - 1](backprop[a][0], backprop[a][1]);
+		if (backprop[a].length == 3) backprop[a - 1](backprop[a][0], backprop[a][1], backprop[a][2]);
+		
+	}
+	
+}
+
+function multiply (ma, mb) {
+	
+	if (ma.d != mb.n) throw new Error("wrong dimensions");
+	
+	var out = new Matrix(ma.n, mb.d);
+	
+	for (var a = 0; a < ma.n; a++) {
+		
+		for (var b = 0; b < mb.d; b++) {
+			
+			out.w[mb.d * a + b] = 0;
+			
+			for (var c = 0; c < ma.d; c++) {
+				
+				out.w[mb.d * a + b] += ma.w[ma.d * a + c] * mb.w[mb.d * c + b];
+				
+			}
+			
+		}
+		
+	}
+	
+	if (recordBackprop) {
+		
+		backprop.push(multiplyBackward, [ma, mb, out]);
+		
+	}
+	
+	return out;
+	
+}
+
+function multiplyBackward (ma, mb, out) {
+	
+	for (var a = 0; a < ma.n; a++) {
+		
+		for (var b = 0; b < mb.d; b++) {
+			
+			for (var c = 0; c < ma.d; c++) {
+				
+				ma.dw[ma.d * a + c] += mb.w[mb.d * c + b] * out.dw[mb.d * a + b];
+				mb.dw[mb.d * c + b] += ma.w[ma.d * a + c] * out.dw[mb.d * a + b];
+				
+			}
+			
+		}
+		
+	}
+	
+}
+
+function feedlessMultiply (ma, mb) {
+	
+	var out = new Matrix(ma.n, ma.d);
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		out.w[a] = ma.w[a] * mb.w[a];
+		
+	}
+	
+	if (recordBackprop) {
+		
+		backprop.push(feedlessMultiplyBackward, [ma, mb, out]);
+		
+	}
+	
+	return out;
+	
+}
+
+function feedlessMultiplyBackward (ma, mb, out) {
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		ma.dw[a] += mb.w[a] * out.dw[a];
+		mb.dw[a] += ma.w[a] * out.dw[a];
+		
+	}
+	
+}
+
+function add (ma, mb) {
+	
+	var out = new Matrix(ma.n, ma.d);
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		out.w[a] = ma.w[a] + mb.w[a];
+		
+	}
+	
+	if (recordBackprop) {
+		
+		backprop.push(addBackward, [ma, mb, out]);
+		
+	}
+	
+	return out;
+	
+}
+
+function addBackward (ma, mb, out) {
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		ma.dw[a] += out.dw[a];
+		mb.dw[a] += out.dw[a];
+		
+	}
+	
+}
+
+function sigmoid (ma) {
+	
+	var out = new Matrix(ma.n, ma.d);
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		out.w[a] = 1 / (1 + Math.exp(-ma.w[a]));
+		
+	}
+	
+	if (recordBackprop) {
+		
+		backprop.push(sigmoidBackward, [ma, out]);
+		
+	}
+	
+	return out;
+	
+}
+
+function sigmoidBackward (ma, out) {
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		ma.dw[a] += out.w[a] * (1 - out.w[a]) * out.dw[a];
+		
+	}
+	
+}
+
+function rectifier (ma) {
+	
+	var out = new Matrix(ma.n, ma.d);
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		out.w[a] = Math.max(0, ma.w[a]);
+		
+	}
+	
+	if (recordBackprop) {
+		
+		backprop.push(rectifierBackward, [ma, out]);
+		
+	}
+	
+	return out;
+	
+}
+
+function rectifierBackward (ma, out) {
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		ma.dw[a] += ma.w[a] > 0 ? out.dw[a] : 0;
+		
+	}
+	
+}
+
+function hyperbolicTangent (ma) {
+	
+	var out = new Matrix(ma.n, ma.d);
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		out.w[a] = Math.tanh(ma.w[a]);
+		
+	}
+	
+	if (recordBackprop) {
+		
+		backprop.push(hyperbolicTangentBackward, [ma, out]);
+		
+	}
+	
+	return out;
+	
+}
+
+function hyperbolicTangentBackward (ma, out) {
+	
+	for (var a = 0; a < ma.w.length; a++) {
+		
+		ma.dw[a] += (1 - out.w[a] * out.w[a]) * out.dw[a];
+		
+	}
+	
+}
+
+function rowPluck (ma, row) {
+	
+	var out = new Matrix(ma.d, 1);
+	
+	for (var a = 0; a < ma.d; a++) {
+		
+		out.w[a] = ma.w[ma.d * row + a];
+		
+	}
+	
+	if (recordBackprop) {
+		
+		backprop.push(rowPluckBackward, [ma, out, row]);
+		
+	}
+	
+	return out;
+	
+}
+
+function rowPluckBackward (ma, out, row) {
+	
+	for (var a = 0; a < ma.d; a++) {
+		
+		ma.dw[ma.d * row + a] += out.dw[a];
+		
+	}
+	
+}
