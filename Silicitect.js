@@ -32,8 +32,6 @@ function init (e) {
 	
 	text = e.responseText;
 	
-	indexToLetter[0] = "";
-	
 	if (characterSet == "predefined") {
 		
 		for (var a = 0; a < characters.length; a++) {
@@ -81,7 +79,7 @@ function init (e) {
 	
 	initModel("lstm");
 	
-	batch(3000, 15, 200);
+	batch(1000, 20, 100);
 	
 }
 
@@ -192,10 +190,10 @@ function train (sentence) {
 	var previous = {};
 	var forward = {};
 	
-	for (var a = -1; a < sentence.length - 1; a++) {
+	for (var a = 0; a < sentence.length - 1; a++) {
 		
-		var letter = a == -1 ? 0 : letterToIndex[sentence.charAt(a)];
-		var nextLetter = a == sentence.length - 1 ? 0 : letterToIndex[sentence.charAt(a + 1)];
+		var letter = letterToIndex[sentence.charAt(a)];
+		var nextLetter = letterToIndex[sentence.charAt(a + 1)];
 		
 		if (!(letter + 1)) {
 			
