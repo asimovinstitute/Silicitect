@@ -1,16 +1,24 @@
-// float arrays?
-// reuse memory
-// add different cost functions than shannon entropy
-// restructure classes
-// split the whole backward thingy
-// remove recurrent crap with previous
-// layer and cell based approach
+/*Silicitect, model neural network architectures in JavaScript for silicon hardware.
+Copyright (C) 2016 Fjodor van Veen
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>*/
 
 var temperature = 1.0;
-var reguliser = 0.000001;
+var reguliser = 0.00000001;
 var learningRate = 0.002;
 var clipValue = 5;
-var letterEmbedSize = 5;
+var letterEmbedSize = 1;
 var decayRate = 0.97;
 
 var running = false;
@@ -77,11 +85,11 @@ function init (e) {
 		
 	}
 	
-	layers = [characters.length, 64, 64, characters.length];
+	layers = [characters.length, 128, 128, characters.length];
 	
 	initModel("lstm");
 	
-	start();
+	// start();
 	
 }
 
@@ -117,24 +125,6 @@ function start (lc, it, ss, sp) {
 	if (it) iterationsPerFrame = it;
 	if (ss) sampleSize = ss;
 	if (sp) samplePrime = sp;
-	
-}
-
-function stop () {
-	
-	running = false;
-	
-}
-
-function save (name) {
-	
-	Stecy.locallySave("silicitect network " + name, JSON.stringify(model));
-	
-}
-
-function load (name) {
-	
-	model = JSON.parse(Stecy.locallyRetrieve("silicitect network " + name));
 	
 }
 
