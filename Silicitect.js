@@ -2,22 +2,23 @@
 // reuse memory
 // add different cost functions than shannon entropy
 // restructure classes
-// optimise? extra matrix random method
 // split the whole backward thingy
+// remove recurrent crap with previous
+// layer and cell based approach
 
 var temperature = 1.0;
 var reguliser = 0.000001;
-var learningRate = 0.01;
-var clipValue = 5.0;
+var learningRate = 0.002;
+var clipValue = 5;
 var letterEmbedSize = 5;
-var decayRate = 0.96;
+var decayRate = 0.97;
 
 var running = false;
-var letterCount = 30;
-var iterationsPerFrame = 100;
-var maxIterations = 1000;
+var letterCount = 50;
+var iterationsPerFrame = 50;
+var maxIterations = 1000000;
 var sampleSize = 10;
-var samplePrime = "1";
+var samplePrime = "a";
 var totalIterations = 0;
 
 var characterSet = "analyse";
@@ -76,7 +77,7 @@ function init (e) {
 		
 	}
 	
-	layers = [characters.length, 10, characters.length];
+	layers = [characters.length, 64, 64, characters.length];
 	
 	initModel("lstm");
 	
@@ -264,9 +265,9 @@ function forwardRNN (letter, previous) {
 		
 		var input = a == 1 ? observation : hidden[a - 1];
 		
-		var h0 = Matrix.multiply(model["value" + a], input);
-		var h1 = Matrix.multiply(model["last" + a], hiddenPrevious[a]);
-		var hiddenValue = Matrix.rectifier(Matrix.add(Matrix.add(h0, h1), model["bias" + a]));
+		var h0 = Matrix.multiply(model["weight" + a], input);
+		var h1 = Matrix.multiply(model["weightRecurrent" + a], hiddenPrevious[a]);
+		var hiddenValue = Matrix.rectifier(Matrix.add(Matrix.add(h0, h1), model["weightBias" + a]));
 		
 		hidden.push(hiddenValue);
 		
@@ -307,20 +308,20 @@ function forwardLSTM (letter, previous) {
 		
 		var input = a == 1 ? observation : hidden[a - 1];
 		
-		var h0 = Matrix.multiply(model["inputValue" + a], input);
-		var h1 = Matrix.multiply(model["inputLast" + a], hiddenPrevious[a]);
+		var h0 = Matrix.multiply(model["input" + a], input);
+		var h1 = Matrix.multiply(model["inputRecurrent" + a], hiddenPrevious[a]);
 		var inputGate = Matrix.sigmoid(Matrix.add(Matrix.add(h0, h1), model["inputBias" + a]));
 		
-		var h2 = Matrix.multiply(model["forgetValue" + a], input);
-		var h3 = Matrix.multiply(model["forgetLast" + a], hiddenPrevious[a]);
+		var h2 = Matrix.multiply(model["forget" + a], input);
+		var h3 = Matrix.multiply(model["forgetRecurrent" + a], hiddenPrevious[a]);
 		var forgetGate = Matrix.sigmoid(Matrix.add(Matrix.add(h2, h3), model["forgetBias" + a]));
 		
-		var h4 = Matrix.multiply(model["outputValue" + a], input);
-		var h5 = Matrix.multiply(model["outputLast" + a], hiddenPrevious[a]);
+		var h4 = Matrix.multiply(model["output" + a], input);
+		var h5 = Matrix.multiply(model["outputRecurrent" + a], hiddenPrevious[a]);
 		var outputGate = Matrix.sigmoid(Matrix.add(Matrix.add(h4, h5), model["outputBias" + a]));
 		
-		var h6 = Matrix.multiply(model["cellValue" + a], input);
-		var h7 = Matrix.multiply(model["cellLast" + a], hiddenPrevious[a]);
+		var h6 = Matrix.multiply(model["cell" + a], input);
+		var h7 = Matrix.multiply(model["cellRecurrent" + a], hiddenPrevious[a]);
 		var cellWrite = Matrix.hyperbolicTangent(Matrix.add(Matrix.add(h6, h7), model["cellBias" + a]));
 		
 		var retain = Matrix.feedlessMultiply(forgetGate, cellPrevious[a]);
@@ -362,9 +363,9 @@ function initModel (generator) {
 			
 			var prevSize = a == 1 ? letterEmbedSize : layers[a - 1];
 			
-			model["value" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
-			model["last" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
-			model["bias" + a] = new Matrix(layers[a], 1);
+			model["weight" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
+			model["weightRecurrent" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
+			model["weightBias" + a] = new Matrix(layers[a], 1);
 			
 		}
 		
@@ -377,20 +378,20 @@ function initModel (generator) {
 			
 			var prevSize = a == 1 ? letterEmbedSize : layers[a - 1];
 			
-			model["inputValue" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
-			model["inputLast" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
+			model["input" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
+			model["inputRecurrent" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
 			model["inputBias" + a] = new Matrix(layers[a], 1);
 			
-			model["forgetValue" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
-			model["forgetLast" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
+			model["forget" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
+			model["forgetRecurrent" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
 			model["forgetBias" + a] = new Matrix(layers[a], 1);
 			
-			model["outputValue" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
-			model["outputLast" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
+			model["output" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
+			model["outputRecurrent" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
 			model["outputBias" + a] = new Matrix(layers[a], 1);
 			
-			model["cellValue" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
-			model["cellLast" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
+			model["cell" + a] = new Matrix(layers[a], prevSize).randomise(0, 0.08);
+			model["cellRecurrent" + a] = new Matrix(layers[a], layers[a]).randomise(0, 0.08);
 			model["cellBias" + a] = new Matrix(layers[a], 1);
 			
 		}
@@ -427,9 +428,9 @@ Stecy.setup = function () {
 
 Art.ready = function () {
 	
-	Stecy.loadFile("input/simple.txt", init);
+	Stecy.loadFile("input/shakespeare.txt", init);
 	
-	Art.doStyle(0, "whiteSpace", "pre", "font", "20px monospace", "tabSize", "6");
+	Art.doStyle(0, "whiteSpace", "pre", "font", "20px monospace", "tabSize", "6", "background", "#333", "color", "#ccc");
 	
 };
 
