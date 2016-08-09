@@ -14,34 +14,35 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>*/
 
-// generalise parameters?
-var temperature = 1.0;
-var reguliser = 0.00000001;
-var learningRate = 0.05;
+var reguliser = 1e-8;
+var learningRate = 0.2;
 var clipValue = 5;
 var decayRate = 0.97;
 
 var letterEmbedSize = 5;
-var running = false;
 var letterCount = 10;
-var iterationsPerFrame = 100;
-var maxIterations = 500;
-var sampleSize = 10;
-var samplePrime = "1";
-var totalIterations = 0;
 
+var running = false;
+var iterationsPerFrame = 200;
+var maxIterations = 1000;
+var sampleSize = 20;
+var samplePrime = "0";
+var networkType = "lstm";
+
+var totalIterations = 0;
 var layers = [];
 var model = {};
 var lastWeights = {};
 var recordBackprop = false;
 var backprop = [];
-var networkType = "lstm";
 var textParser;
 
 function init (e) {
-	// specify char string instead
+	
 	// prime protection
-	textParser = new TextParser(e.responseText, "analyse");
+	// textParser = new TextParser(e.responseText, "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t" + 
+	// 			"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
+	textParser = new TextParser(e.responseText, "");
 	
 	layers = [textParser.characters.length, 10, 10, textParser.characters.length];
 	
@@ -101,14 +102,9 @@ function ask (length, prime, forwardFunction) {
 		
 		out = forwardFunction(inputLetter, a == 0);
 		
-		for (var b = 0; b < out.w.length; b++) {
-			
-			out.w[b] /= temperature;
-			
-		}
-		
-		var probabilities = Matrix.softmax(out);
-		var index = sampler(probabilities.w);
+		var temperature = 1;
+		var probabilities = Matrix.softmax(out, temperature);
+		var index = Matrix.sampleRandomSum(probabilities);
 		
 		sentence += textParser.characters.charAt(index);
 		
@@ -148,13 +144,13 @@ function answer (sentence, forwardFunction) {
 	
 }
 
-function forwardRNN (letter, cold) {
+function forwardRNN (input, cold) {
 	
 	if (cold) {
 		
 		for (var a = 1; a < layers.length - 1; a++) {
 			
-			model["weightLast" + a] = new Matrix(layers[a], 1);
+			model["outputLast" + a] = new Matrix(layers[a], 1);
 			
 		}
 		
@@ -162,17 +158,17 @@ function forwardRNN (letter, cold) {
 	
 	for (var a = 1; a < layers.length - 1; a++) {
 		
-		var input = a == 1 ? observation : hidden[a - 1];
+		var previousLayer = a == 1 ? Matrix.rowPluck(model["inputLetters"], input) : model["outputLast" + (a - 1)];
 		
-		var h0 = Matrix.multiply(model["weight" + a], input);
-		var h1 = Matrix.multiply(model["weightRecurrent" + a], model["weightLast" + a]);
+		var h0 = Matrix.multiply(model["weight" + a], previousLayer);
+		var h1 = Matrix.multiply(model["weightRecurrent" + a], model["outputLast" + a]);
 		var hiddenValues = Matrix.rectifiedLinearUnit(Matrix.add(Matrix.add(h0, h1), model["weightBias" + a]));
 		
-		model["weightLast" + a] = hiddenValues;
+		model["outputLast" + a] = hiddenValues;
 		
 	}
 	
-	var output = Matrix.add(Matrix.multiply(model["decoder"], model["weightLast" + (layers.length - 2)]), model["decoderBias"]);
+	var output = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layers.length - 2)]), model["decoderBias"]);
 	
 	return output;
 	
@@ -270,7 +266,8 @@ function initModel (generator) {
 			model["weight" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
 			model["weightRecurrent" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
 			model["weightBias" + a] = new Matrix(layers[a], 1);
-			model["weightLast" + a] = new Matrix(layers[a], 1);
+			
+			model["outputLast" + a] = new Matrix(layers[a], 1);
 			
 		}
 		
@@ -310,23 +307,6 @@ function initModel (generator) {
 	
 }
 
-function sampler (w) {
-	
-	var random = Math.random();
-	var sum = 0;
-	
-	for (var a = 0; a < w.length; a++) {
-		
-		sum += w[a];
-		
-		if (sum > random) return a;
-		
-	}
-	
-	return a.length - 1;
-	
-}
-
 Stecy.setup = function () {
 	
 	Art.title = "Silicitect";
@@ -347,43 +327,24 @@ Art.ready = function () {
 		
 		this.text = text;
 		this.letterToIndex = {};
-		this.characters = "";
+		this.characters = characterSet;
 		
-		if (characterSet == "predefined") {
+		for (var a = 0; a < this.characters.length; a++) {
 			
-			this.characters = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t" + 
-						"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+			this.letterToIndex[this.characters.charAt(a)] = a;
 			
-			for (var a = 0; a < this.characters.length; a++) {
-				
-				this.letterToIndex[this.characters.charAt(a)] = a;
-				
-			}
+		}
+		
+		for (var a = 0; a < this.text.length; a++) {
 			
-			for (var a = 0; a < this.text.length; a++) {
-				
-				if (!(1 + this.letterToIndex[this.text.charAt(a)])) {
-					
-					throw new Error("TextParser error: Wrong character found, " + this.text.charAt(a) + " not in " + characterSet);
-					
-				}
-				
-			}
+			var char = this.text.charAt(a);
 			
-		} else if (characterSet == "analyse") {
+			if (1 + this.letterToIndex[char]) continue;
 			
-			for (var a = 0; a < this.text.length; a++) {
-				
-				var char = this.text.charAt(a);
-				
-				if (1 + this.letterToIndex[char]) continue;
-				
-				this.letterToIndex[char] = this.characters.length;
-				this.characters += char;
-				
-			}
+			this.letterToIndex[char] = this.characters.length;
+			this.characters += char;
 			
-		} else throw new Error("TextParser error: Wrong character set specified");
+		}
 		
 	};
 	
@@ -427,11 +388,17 @@ Art.ready = function () {
 		
 	};
 	
-	Matrix.softmax = function (ma) {
+	Matrix.softmax = function (ma, temp) {
 		
 		var out = new Matrix(ma.n, ma.d);
 		var max = -1e10;
 		var sum = 0;
+		
+		if (temp) {
+			
+			for (var a = 0; a < ma.w.length; a++) ma.w[a] /= temp;
+			
+		}
 		
 		for (var a = 0; a < ma.w.length; a++) {
 			
@@ -454,6 +421,23 @@ Art.ready = function () {
 		}
 		
 		return out;
+		
+	};
+	
+	Matrix.sampleRandomSum = function (ma) {
+		
+		var random = Math.random();
+		var sum = 0;
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			sum += ma.w[a];
+			
+			if (sum > random) return a;
+			
+		}
+		
+		return a - 1;
 		
 	};
 	
