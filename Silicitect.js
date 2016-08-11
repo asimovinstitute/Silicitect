@@ -15,9 +15,9 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>*/
 
 var reguliser = 1e-8;
-var learningRate = 0.2;
+var learningRate = 0.05;
 var clipValue = 5;
-var decayRate = 0.97;
+var decayRate = 0.95;
 
 var layers = [];
 var model = {};
@@ -28,10 +28,10 @@ var backprop = [];
 var letterEmbedSize = 5;
 
 var running = false;
-var iterationsPerFrame = 500;
+var iterationsPerFrame = 250;
 var maxIterations = 1000;
 var letterCount = 10;
-var sampleSize = 20;
+var sampleSize = 100;
 var samplePrime = "0";
 var networkType = [initLSTM, forwardLSTM];
 
@@ -218,24 +218,7 @@ function forwardGRU (input, firstPass) {
 		}
 		
 	}
-	// def forward_prop_step(x_t, s_t1_prev):
-    //   # This is how we calculated the hidden state in a simple RNN. No longer!
-    //   # s_t = T.tanh(U[:,x_t] + W.dot(s_t1_prev))
-    //    
-    //   # Get the word vector
-    //   x_e = E[:,x_t]
-    //    
-    //   # GRU Layer
-    //   z_t1 = T.nnet.hard_sigmoid(U[0].dot(x_e) + W[0].dot(s_t1_prev) + b[0])
-    //   r_t1 = T.nnet.hard_sigmoid(U[1].dot(x_e) + W[1].dot(s_t1_prev) + b[1])
-    //   c_t1 = T.tanh(U[2].dot(x_e) + W[2].dot(s_t1_prev * r_t1) + b[2])
-    //   s_t1 = (T.ones_like(z_t1) - z_t1) * c_t1 + z_t1 * s_t1_prev
-    //    
-    //   # Final output calculation
-    //   # Theano's softmax returns a matrix with one row, we only need the row
-    //   o_t = T.nnet.softmax(V.dot(s_t1) + c)[0]
-	// 
-    //   return [o_t, s_t1]
+	
 	for (var a = 1; a < layers.length - 1; a++) {
 		
 		var previousLayer = a == 1 ? Matrix.rowPluck(model["inputLetters"], input) : model["outputLast" + (a - 1)];
@@ -253,9 +236,7 @@ function forwardGRU (input, firstPass) {
 		var cellWrite = Matrix.hyperbolicTangent(Matrix.add(Matrix.add(h6, h7), model["cellBias" + a]));
 		
 		model["outputLast" + a] = Matrix.add(Matrix.elementMultiply(Matrix.invert(updateGate), cellWrite), Matrix.elementMultiply(updateGate, model["outputLast" + a]));
-		// console.log(Matrix.elementMultiply(updateGate, previousLayer), updateGate, previousLayer);
 		
-		// cookies();
 	}
 	
 	var output = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layers.length - 2)]), model["decoderBias"]);
@@ -574,19 +555,7 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.invertBackward, [ma, out]);
-		
 		return out;
-		
-	};
-	
-	Matrix.invertBackward = function (ma, out) {
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			ma.dw[a] += -out.dw[a];
-			
-		}
 		
 	};
 	
