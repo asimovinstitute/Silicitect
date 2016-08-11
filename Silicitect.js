@@ -26,14 +26,14 @@ var recordBackprop = false;
 var backprop = [];
 
 var letterEmbedSize = 5;
-var letterCount = 10;
 
 var running = false;
 var iterationsPerFrame = 500;
 var maxIterations = 1000;
+var letterCount = 10;
 var sampleSize = 20;
 var samplePrime = "0";
-var networkType = "lstm";
+var networkType = [initLSTM, forwardLSTM];
 
 var totalIterations = 0;
 var textParser;
@@ -46,8 +46,7 @@ function init (e) {
 	
 	layers = [textParser.characters.length, 10, 10, textParser.characters.length];
 	
-	if (networkType == "lstm") initLSTM();
-	else initRNN();
+	networkType[0]();
 	
 	running = true;
 	
@@ -67,16 +66,21 @@ function doNetworkStuff () {
 		
 		sentence = textParser.text.substr(Math.floor(uniform() * (textParser.text.length - letterCount)), letterCount);
 		
-		averageLoss += answer(sentence, networkType == "lstm" ? forwardLSTM : forwardRNN);
+		averageLoss += answer(sentence, networkType[1]);
 		
 	}
 	
 	totalIterations += iterationsPerFrame;
 	
-	console.log(totalIterations,
-				(averageLoss / iterationsPerFrame).toFixed(2),
-				(new Date() - startTime) + "ms",
-				ask(sampleSize, samplePrime, networkType == "lstm" ? forwardLSTM : forwardRNN));
+	// Art.doClear(0);
+	Art.doWrite(0, totalIterations + " " +
+				(averageLoss / iterationsPerFrame).toFixed(2) + " " +
+				(new Date() - startTime) + "ms\n" +
+				ask(sampleSize, samplePrime, networkType[1]) + "\n");
+	// console.log(totalIterations,
+	// 			(averageLoss / iterationsPerFrame).toFixed(2),
+	// 			(new Date() - startTime) + "ms",
+	// 			ask(sampleSize, samplePrime, networkType[1]));
 	
 }
 
@@ -107,7 +111,7 @@ function ask (length, prime, forwardFunction) {
 		
 		var temperature = 1;
 		var probabilities = Matrix.softmax(out, temperature);
-		var index = Matrix.sampleMax(probabilities);
+		var index = Matrix.sampleRandomSum(probabilities);
 		
 		sentence += textParser.characters.charAt(index);
 		
@@ -141,14 +145,6 @@ function answer (sentence, forwardFunction) {
 		
 	}
 	
-	backward();
-	
-	return loss;
-	
-}
-
-function backward () {
-	
 	for (var a = backprop.length - 1; a > -1; a -= 2) {
 		
 		if (backprop[a].length == 1) backprop[a - 1](backprop[a][0]);
@@ -177,6 +173,8 @@ function backward () {
 		
 	}
 	
+	return loss;
+	
 }
 
 function forwardRNN (input, firstPass) {
@@ -195,12 +193,69 @@ function forwardRNN (input, firstPass) {
 		
 		var previousLayer = a == 1 ? Matrix.rowPluck(model["inputLetters"], input) : model["outputLast" + (a - 1)];
 		
-		var h0 = Matrix.multiply(model["weight" + a], previousLayer);
-		var h1 = Matrix.multiply(model["weightRecurrent" + a], model["outputLast" + a]);
-		var hiddenValues = Matrix.rectifiedLinearUnit(Matrix.add(Matrix.add(h0, h1), model["weightBias" + a]));
+		var h0 = Matrix.multiply(model["cell" + a], previousLayer);
+		var h1 = Matrix.multiply(model["cellHidden" + a], model["outputLast" + a]);
+		var hiddenValues = Matrix.rectifiedLinear(Matrix.add(Matrix.add(h0, h1), model["cellBias" + a]));
 		
 		model["outputLast" + a] = hiddenValues;
 		
+	}
+	
+	var output = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layers.length - 2)]), model["decoderBias"]);
+	
+	return output;
+	
+}
+
+function forwardGRU (input, firstPass) {
+	
+	if (firstPass) {
+		
+		for (var a = 1; a < layers.length - 1; a++) {
+			
+			model["outputLast" + a] = new Matrix(layers[a], 1);
+			
+		}
+		
+	}
+	// def forward_prop_step(x_t, s_t1_prev):
+    //   # This is how we calculated the hidden state in a simple RNN. No longer!
+    //   # s_t = T.tanh(U[:,x_t] + W.dot(s_t1_prev))
+    //    
+    //   # Get the word vector
+    //   x_e = E[:,x_t]
+    //    
+    //   # GRU Layer
+    //   z_t1 = T.nnet.hard_sigmoid(U[0].dot(x_e) + W[0].dot(s_t1_prev) + b[0])
+    //   r_t1 = T.nnet.hard_sigmoid(U[1].dot(x_e) + W[1].dot(s_t1_prev) + b[1])
+    //   c_t1 = T.tanh(U[2].dot(x_e) + W[2].dot(s_t1_prev * r_t1) + b[2])
+    //   s_t1 = (T.ones_like(z_t1) - z_t1) * c_t1 + z_t1 * s_t1_prev
+    //    
+    //   # Final output calculation
+    //   # Theano's softmax returns a matrix with one row, we only need the row
+    //   o_t = T.nnet.softmax(V.dot(s_t1) + c)[0]
+	// 
+    //   return [o_t, s_t1]
+	for (var a = 1; a < layers.length - 1; a++) {
+		
+		var previousLayer = a == 1 ? Matrix.rowPluck(model["inputLetters"], input) : model["outputLast" + (a - 1)];
+		
+		var h0 = Matrix.multiply(model["update" + a], previousLayer);
+		var h1 = Matrix.multiply(model["updateHidden" + a], model["outputLast" + a]);
+		var updateGate = Matrix.sigmoid(Matrix.add(Matrix.add(h0, h1), model["updateBias" + a]));
+		
+		var h2 = Matrix.multiply(model["reset" + a], previousLayer);
+		var h3 = Matrix.multiply(model["resetHidden" + a], model["outputLast" + a]);
+		var resetGate = Matrix.sigmoid(Matrix.add(Matrix.add(h2, h3), model["resetBias" + a]));
+		
+		var h6 = Matrix.multiply(model["cell" + a], Matrix.elementMultiply(previousLayer, resetGate));
+		var h7 = Matrix.multiply(model["cellHidden" + a], model["outputLast" + a]);
+		var cellWrite = Matrix.hyperbolicTangent(Matrix.add(Matrix.add(h6, h7), model["cellBias" + a]));
+		
+		model["outputLast" + a] = Matrix.add(Matrix.elementMultiply(Matrix.invert(updateGate), cellWrite), Matrix.elementMultiply(updateGate, model["outputLast" + a]));
+		// console.log(Matrix.elementMultiply(updateGate, previousLayer), updateGate, previousLayer);
+		
+		// cookies();
 	}
 	
 	var output = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layers.length - 2)]), model["decoderBias"]);
@@ -227,19 +282,19 @@ function forwardLSTM (input, firstPass) {
 		var previousLayer = a == 1 ? Matrix.rowPluck(model["inputLetters"], input) : model["outputLast" + (a - 1)];
 		
 		var h0 = Matrix.multiply(model["input" + a], previousLayer);
-		var h1 = Matrix.multiply(model["inputRecurrent" + a], model["outputLast" + a]);
+		var h1 = Matrix.multiply(model["inputHidden" + a], model["outputLast" + a]);
 		var inputGate = Matrix.sigmoid(Matrix.add(Matrix.add(h0, h1), model["inputBias" + a]));
 		
 		var h2 = Matrix.multiply(model["forget" + a], previousLayer);
-		var h3 = Matrix.multiply(model["forgetRecurrent" + a], model["outputLast" + a]);
+		var h3 = Matrix.multiply(model["forgetHidden" + a], model["outputLast" + a]);
 		var forgetGate = Matrix.sigmoid(Matrix.add(Matrix.add(h2, h3), model["forgetBias" + a]));
 		
 		var h4 = Matrix.multiply(model["output" + a], previousLayer);
-		var h5 = Matrix.multiply(model["outputRecurrent" + a], model["outputLast" + a]);
+		var h5 = Matrix.multiply(model["outputHidden" + a], model["outputLast" + a]);
 		var outputGate = Matrix.sigmoid(Matrix.add(Matrix.add(h4, h5), model["outputBias" + a]));
 		
 		var h6 = Matrix.multiply(model["cell" + a], previousLayer);
-		var h7 = Matrix.multiply(model["cellRecurrent" + a], model["outputLast" + a]);
+		var h7 = Matrix.multiply(model["cellHidden" + a], model["outputLast" + a]);
 		var cellWrite = Matrix.hyperbolicTangent(Matrix.add(Matrix.add(h6, h7), model["cellBias" + a]));
 		
 		var retain = Matrix.elementMultiply(forgetGate, model["cellLast" + a]);
@@ -266,9 +321,9 @@ function initRNN () {
 		
 		var prevSize = a == 1 ? letterEmbedSize : layers[a - 1];
 		
-		model["weight" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
-		model["weightRecurrent" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
-		model["weightBias" + a] = new Matrix(layers[a], 1);
+		model["cell" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
+		model["cellHidden" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
+		model["cellBias" + a] = new Matrix(layers[a], 1);
 		
 		model["outputLast" + a] = new Matrix(layers[a], 1);
 		
@@ -281,7 +336,32 @@ function initRNN () {
 
 function initGRU () {
 	
+	model = {};
 	
+	model["inputLetters"] = new Matrix(layers[0], letterEmbedSize).randomiseNormalised();
+	
+	for (var a = 1; a < layers.length - 1; a++) {
+		
+		var prevSize = a == 1 ? letterEmbedSize : layers[a - 1];
+		
+		model["update" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
+		model["updateHidden" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
+		model["updateBias" + a] = new Matrix(layers[a], 1);
+		
+		model["reset" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
+		model["resetHidden" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
+		model["resetBias" + a] = new Matrix(layers[a], 1);
+		
+		model["cell" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
+		model["cellHidden" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
+		model["cellBias" + a] = new Matrix(layers[a], 1);
+		
+		model["outputLast" + a] = new Matrix(layers[a], 1);
+		
+	}
+	
+	model["decoder"] = new Matrix(layers[layers.length - 1], layers[layers.length - 2]).randomiseUniform();
+	model["decoderBias"] = new Matrix(layers[layers.length - 1], 1);
 	
 }
 
@@ -296,20 +376,20 @@ function initLSTM () {
 		var prevSize = a == 1 ? letterEmbedSize : layers[a - 1];
 		
 		model["input" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
-		model["inputRecurrent" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
+		model["inputHidden" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
 		model["inputBias" + a] = new Matrix(layers[a], 1);
 		
 		model["forget" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
-		model["forgetRecurrent" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
+		model["forgetHidden" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
 		model["forgetBias" + a] = new Matrix(layers[a], 1);
 		
 		model["output" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
-		model["outputRecurrent" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
+		model["outputHidden" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
 		model["outputBias" + a] = new Matrix(layers[a], 1);
 		model["outputLast" + a] = new Matrix(layers[a], 1);
 		
 		model["cell" + a] = new Matrix(layers[a], prevSize).randomiseNormalised();
-		model["cellRecurrent" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
+		model["cellHidden" + a] = new Matrix(layers[a], layers[a]).randomiseNormalised();
 		model["cellBias" + a] = new Matrix(layers[a], 1);
 		model["cellLast" + a] = new Matrix(layers[a], 1);
 		
@@ -379,7 +459,7 @@ Art.ready = function () {
 	
 	Matrix.prototype.randomiseUniform = function () {
 		
-		for (var a = 0; a < this.n * this.d; a++) {
+		for (var a = 0; a < this.w.length; a++) {
 			
 			this.w[a] = uniform();
 			
@@ -389,9 +469,21 @@ Art.ready = function () {
 		
 	};
 	
+	Matrix.prototype.fillOnes = function () {
+		
+		for (var a = 0; a < this.w.length; a++) {
+			
+			this.w[a] = 1;
+			
+		}
+		
+		return this;
+		
+	};
+	
 	Matrix.prototype.randomiseNormalised = function (base, range) {
 		
-		for (var a = 0; a < this.n * this.d; a++) {
+		for (var a = 0; a < this.w.length; a++) {
 			
 			this.w[a] = uniform() / Math.sqrt(this.d);
 			
@@ -469,6 +561,32 @@ Art.ready = function () {
 		}
 		
 		return a - 1;
+		
+	};
+	
+	Matrix.invert = function (ma) {
+		
+		var out = new Matrix(ma.n, ma.d);
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			out.w[a] = 1 - ma.w[a];
+			
+		}
+		
+		if (recordBackprop) backprop.push(Matrix.invertBackward, [ma, out]);
+		
+		return out;
+		
+	};
+	
+	Matrix.invertBackward = function (ma, out) {
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			ma.dw[a] += -out.dw[a];
+			
+		}
 		
 	};
 	
@@ -599,7 +717,7 @@ Art.ready = function () {
 		
 	};
 	
-	Matrix.rectifiedLinearUnit = function (ma) {
+	Matrix.rectifiedLinear = function (ma) {
 		
 		var out = new Matrix(ma.n, ma.d);
 		
@@ -609,13 +727,13 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.rectifiedLinearUnitBackward, [ma, out]);
+		if (recordBackprop) backprop.push(Matrix.rectifiedLinearBackward, [ma, out]);
 		
 		return out;
 		
 	};
 	
-	Matrix.rectifiedLinearUnitBackward = function (ma, out) {
+	Matrix.rectifiedLinearBackward = function (ma, out) {
 		
 		for (var a = 0; a < ma.w.length; a++) {
 			
