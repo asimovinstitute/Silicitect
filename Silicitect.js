@@ -27,9 +27,9 @@ var backprop = [];
 
 var running = false;
 var iterationsPerFrame = 100;
-var maxIterations = 1000;
+var maxIterations = 4e3;
 var letterCount = 10;
-var sampleSize = 100;
+var sampleSize = 50;
 var samplePrime = "0";
 var networkType = [initLSTM, forwardLSTM];
 
@@ -83,11 +83,13 @@ function doNetworkStuff () {
 				
 				model["output"].dw[c] = probabilities.w[c];
 				
+				averageLoss -= Math.log(c == nextLetter ? probabilities.w[c] : 1 - probabilities.w[c]);
+				
 			}
 			
 			model["output"].dw[nextLetter] -= 1;
 			
-			averageLoss -= Math.log(probabilities.w[nextLetter]);
+			// averageLoss -= Math.log(probabilities.w[nextLetter]);
 			
 		}
 		
