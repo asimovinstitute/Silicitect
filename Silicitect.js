@@ -15,7 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>*/
 
 var reguliser = 1e-8;
-var learningRate = 0.05;
+var learningRate = 0.1;
 var clipValue = 5;
 var decayRate = 0.95;
 
@@ -25,11 +25,9 @@ var lastWeights = {};
 var recordBackprop = false;
 var backprop = [];
 
-var letterEmbedSize = 4;
-
 var running = false;
-var iterationsPerFrame = 50;
-var maxIterations = 400;
+var iterationsPerFrame = 100;
+var maxIterations = 1000;
 var letterCount = 10;
 var sampleSize = 100;
 var samplePrime = "0";
@@ -68,14 +66,16 @@ function doNetworkStuff () {
 		var sentence = textParser.text.substr(Math.floor(uniform() * (textParser.text.length - letterCount)), letterCount);
 		var inputValues = sentence.slice(0, sentence.length - 1).split("");
 		var targetValues = sentence.slice(1).split("");
-		var loss = 0;
 		
 		for (var a = 0; a < inputValues.length; a++) {
 			
-			var letter = Matrix.rowPluck(model["inputLetters"], textParser.charToIndex[inputValues[a]]);
+			var letter = textParser.charToIndex[inputValues[a]];
 			var nextLetter = textParser.charToIndex[targetValues[a]];
 			
-			forwardFunction(letter, a == 0);
+			model["inputLetters"].fillZeros();
+			model["inputLetters"].w[letter] = 1;
+			
+			forwardFunction(a == 0);
 			
 			var probabilities = Matrix.softmax(model["output"]);
 			
@@ -87,7 +87,7 @@ function doNetworkStuff () {
 			
 			model["output"].dw[nextLetter] -= 1;
 			
-			loss -= Math.log(probabilities.w[nextLetter]);
+			averageLoss -= Math.log(probabilities.w[nextLetter]);
 			
 		}
 		
@@ -112,19 +112,25 @@ function ask (length, prime, forwardFunction) {
 	
 	for (var a = 0; a < prime.length; a++) {
 		
-		if (!(1 + textParser.charToIndex[prime.charAt(a)])) continue;
+		var letter = textParser.charToIndex[prime.charAt(a)];
 		
-		var letter = Matrix.rowPluck(model["inputLetters"], textParser.charToIndex[prime.charAt(a)]);
+		if (!(1 + letter)) continue;
 		
-		forwardFunction(letter, a == 0);
+		model["inputLetters"].fillZeros();
+		model["inputLetters"].w[letter] = 1;
+		
+		forwardFunction(a == 0);
 		
 	}
 	
 	for (var a = 0; a < length; a++) {
 		
-		var letter = Matrix.rowPluck(model["inputLetters"], textParser.charToIndex[sentence.charAt(sentence.length - 1)]);
+		var letter = textParser.charToIndex[sentence.charAt(sentence.length - 1)];
 		
-		forwardFunction(letter, a == 0);
+		model["inputLetters"].fillZeros();
+		model["inputLetters"].w[letter] = 1;
+		
+		forwardFunction(a == 0);
 		
 		var temperature = 1;
 		var probabilities = Matrix.softmax(model["output"], temperature);
@@ -170,8 +176,8 @@ function backpropagate () {
 	
 }
 
-function forwardLSTM (input, firstPass) {
-	
+function forwardLSTM (firstPass) {
+	// move firstpass up
 	if (firstPass) {
 		
 		for (var a = 1; a < layerSizes.length - 1; a++) {
@@ -182,11 +188,10 @@ function forwardLSTM (input, firstPass) {
 		}
 		
 	}
-	// last layer activation, input matrix as well
-	// strip out rowpluck model
+	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		var previousLayer = a == 1 ? input : model["outputLast" + (a - 1)];
+		var previousLayer = a == 1 ? model["inputLetters"] : model["outputLast" + (a - 1)];
 		
 		var h0 = Matrix.multiply(model["input" + a], previousLayer);
 		var h1 = Matrix.multiply(model["inputHidden" + a], model["outputLast" + a]);
@@ -220,35 +225,35 @@ function initLSTM () {
 	
 	model = {};
 	
-	model["inputLetters"] = new Matrix(layerSizes[0], letterEmbedSize).randomiseNormalised();
+	model["inputLetters"] = new Matrix(layerSizes[0], 1);
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		var prevSize = a == 1 ? letterEmbedSize : layerSizes[a - 1];
+		var prevSize = layerSizes[a - 1];
 		var size = layerSizes[a];
 		
 		model["input" + a] = new Matrix(size, prevSize).randomiseNormalised();
 		model["inputHidden" + a] = new Matrix(size, size).randomiseNormalised();
-		model["inputBias" + a] = new Matrix(size, 1);
+		model["inputBias" + a] = new Matrix(size, 1).fillOnes();
 		
 		model["forget" + a] = new Matrix(size, prevSize).randomiseNormalised();
 		model["forgetHidden" + a] = new Matrix(size, size).randomiseNormalised();
-		model["forgetBias" + a] = new Matrix(size, 1);
+		model["forgetBias" + a] = new Matrix(size, 1).fillOnes();
 		
 		model["output" + a] = new Matrix(size, prevSize).randomiseNormalised();
 		model["outputHidden" + a] = new Matrix(size, size).randomiseNormalised();
-		model["outputBias" + a] = new Matrix(size, 1);
+		model["outputBias" + a] = new Matrix(size, 1).fillOnes();
 		model["outputLast" + a] = new Matrix(size, 1);
 		
 		model["cell" + a] = new Matrix(size, prevSize).randomiseNormalised();
 		model["cellHidden" + a] = new Matrix(size, size).randomiseNormalised();
-		model["cellBias" + a] = new Matrix(size, 1);
+		model["cellBias" + a] = new Matrix(size, 1).fillOnes();
 		model["cellLast" + a] = new Matrix(size, 1);
 		
 	}
 	
 	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseUniform();
-	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1).fillOnes();
 	model["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	
 }
@@ -312,23 +317,7 @@ Art.ready = function () {
 	
 	Matrix.prototype.randomiseUniform = function () {
 		
-		for (var a = 0; a < this.w.length; a++) {
-			
-			this.w[a] = uniform();
-			
-		}
-		
-		return this;
-		
-	};
-	
-	Matrix.prototype.fillOnes = function () {
-		
-		for (var a = 0; a < this.w.length; a++) {
-			
-			this.w[a] = 1;
-			
-		}
+		for (var a = 0; a < this.w.length; a++) this.w[a] = uniform();
 		
 		return this;
 		
@@ -336,11 +325,23 @@ Art.ready = function () {
 	
 	Matrix.prototype.randomiseNormalised = function (base, range) {
 		
-		for (var a = 0; a < this.w.length; a++) {
-			
-			this.w[a] = uniform() / Math.sqrt(this.d);
-			
-		}
+		for (var a = 0; a < this.w.length; a++) this.w[a] = uniform() / Math.sqrt(this.d);
+		
+		return this;
+		
+	};
+	
+	Matrix.prototype.fillOnes = function () {
+		
+		for (var a = 0; a < this.w.length; a++) this.w[a] = 1;
+		
+		return this;
+		
+	};
+	
+	Matrix.prototype.fillZeros = function () {
+		
+		for (var a = 0; a < this.w.length; a++) this.w[a] = 0;
 		
 		return this;
 		
@@ -653,11 +654,11 @@ function initRNN () {
 	
 	model = {};
 	
-	model["inputLetters"] = new Matrix(layerSizes[0], letterEmbedSize).randomiseNormalised();
+	model["inputLetters"] = new Matrix(layerSizes[0], 1).randomiseNormalised();
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		var prevSize = a == 1 ? letterEmbedSize : layerSizes[a - 1];
+		var prevSize = layerSizes[a - 1];
 		
 		model["cell" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
 		model["cellHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
@@ -669,6 +670,7 @@ function initRNN () {
 	
 	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseNormalised();
 	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	model["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	
 }
 
@@ -676,11 +678,11 @@ function initGRU () {
 	
 	model = {};
 	
-	model["inputLetters"] = new Matrix(layerSizes[0], letterEmbedSize).randomiseNormalised();
+	model["inputLetters"] = new Matrix(layerSizes[0], 1).randomiseNormalised();
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		var prevSize = a == 1 ? letterEmbedSize : layerSizes[a - 1];
+		var prevSize = layerSizes[a - 1];
 		
 		model["update" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
 		model["updateHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
@@ -700,6 +702,7 @@ function initGRU () {
 	
 	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseUniform();
 	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	model["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	
 }
 
@@ -727,9 +730,7 @@ function forwardRNN (input, firstPass) {
 		
 	}
 	
-	var output = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]);
-	
-	return output;
+	model["output"] = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]);
 	
 }
 
@@ -765,8 +766,6 @@ function forwardGRU (input, firstPass) {
 		
 	}
 	
-	var output = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]);
-	
-	return output;
+	model["output"] = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]);
 	
 }
