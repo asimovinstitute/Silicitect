@@ -14,27 +14,18 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>*/
 
-var reguliser = 1e-8;
-var learningRate = 0.1;
-var clipValue = 5;
-var decayRate = 0.95;
-
-var layerSizes = [];
-var model = {};
-var lastWeights = {};
-var recordBackprop = false;
-var backprop = [];
-
 var running = false;
 var iterationsPerFrame = 100;
-var maxIterations = 4e3;
+var maxIterations = 1e3;
 var letterCount = 10;
 var sampleSize = 50;
-var samplePrime = "0";
-var networkType = [initLSTM, forwardLSTM];
-
+var filePath = "input/simple.txt";
+var samplePrime = "1";
 var totalIterations = 0;
-var textParser;
+var layerSizes = [];
+
+var sil = null;
+var textParser = null;
 
 function init (e) {
 	
@@ -42,9 +33,13 @@ function init (e) {
 	// 			"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
 	textParser = new TextParser(e.responseText, "");
 	
+	Art.doStyle(0, "whiteSpace", "pre-wrap");
+	
 	layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
 	
-	networkType[0]();
+	sil = new Silicitect(initLSTM, forwardLSTM);
+	
+	Matrix.silicitect = sil;
 	
 	running = true;
 	
@@ -59,58 +54,79 @@ function doNetworkStuff () {
 	
 	for (var b = 0; b < iterationsPerFrame; b++) {
 		
-		recordBackprop = true;
-		backprop = [];
+		sil.recordBackprop = true;
 		
-		var forwardFunction = networkType[1];
 		var sentence = textParser.text.substr(Math.floor(uniform() * (textParser.text.length - letterCount)), letterCount);
-		var inputValues = sentence.slice(0, sentence.length - 1).split("");
-		var targetValues = sentence.slice(1).split("");
+		var inputValues = [];
+		var targetValues = [];
+		
+		for (var a = 0; a < sentence.length - 1; a++) {
+			
+			inputValues.push(textParser.charToIndex[sentence.charAt(a)]);
+			
+			if (a < sentence.length - 1) targetValues.push(textParser.charToIndex[sentence.charAt(a + 1)]);
+			
+		}
+		
+		resetLastValues();
 		
 		for (var a = 0; a < inputValues.length; a++) {
 			
 			var letter = textParser.charToIndex[inputValues[a]];
 			var nextLetter = textParser.charToIndex[targetValues[a]];
 			
-			model["inputLetters"].fillZeros();
-			model["inputLetters"].w[letter] = 1;
+			sil.model["inputLetters"].fillZeros();
+			sil.model["inputLetters"].w[inputValues[a]] = 1;
 			
-			forwardFunction(a == 0);
+			sil.forward();
 			
-			var probabilities = Matrix.softmax(model["output"]);
+			var probabilities = Matrix.softmax(sil.model["output"]);
 			
 			for (var c = 0; c < probabilities.w.length; c++) {
 				
-				model["output"].dw[c] = probabilities.w[c];
+				sil.model["output"].dw[c] = probabilities.w[c];
 				
-				averageLoss -= Math.log(c == nextLetter ? probabilities.w[c] : 1 - probabilities.w[c]);
+				averageLoss -= Math.log(c == targetValues[a] ? probabilities.w[c] : 1 - probabilities.w[c]);
+				// averageLoss += Math.abs((c == targetValues[a]) - probabilities.w[c]);
 				
 			}
 			
-			model["output"].dw[nextLetter] -= 1;
-			
-			// averageLoss -= Math.log(probabilities.w[nextLetter]);
+			sil.model["output"].dw[nextLetter] -= 1;
 			
 		}
 		
-		backpropagate();
+		sil.backpropagate();
 		
 	}
 	
 	totalIterations += iterationsPerFrame;
 	
 	// Art.doClear(0);
-	Art.doWrite(0, totalIterations + " " + (averageLoss / iterationsPerFrame).toFixed(2) + " " + (new Date() - startTime) + "ms " + ask(sampleSize, samplePrime, networkType[1]) + "\n");
+	Art.doWrite(0, totalIterations + " " + (averageLoss / iterationsPerFrame).toFixed(2) + " ");
+	Art.doWrite(0, (new Date() - startTime) + "ms " + ask(sampleSize, samplePrime) + "\n");
+	
+}
+
+function resetLastValues () {
+	
+	for (var a = 1; a < layerSizes.length - 1; a++) {
+		
+		sil.model["outputLast" + a].fillZeros();
+		sil.model["cellLast" + a].fillZeros();
+		
+	}
 	
 }
 
 Stecy.sequence("update", [doNetworkStuff]);
 
-function ask (length, prime, forwardFunction) {
+function ask (length, prime) {
 	
-	recordBackprop = false;
+	sil.recordBackprop = false;
 	
 	var sentence = prime;
+	
+	resetLastValues();
 	
 	for (var a = 0; a < prime.length; a++) {
 		
@@ -118,24 +134,26 @@ function ask (length, prime, forwardFunction) {
 		
 		if (!(1 + letter)) continue;
 		
-		model["inputLetters"].fillZeros();
-		model["inputLetters"].w[letter] = 1;
-		
-		forwardFunction(a == 0);
+		sil.model["inputLetters"].fillZeros();
+		sil.model["inputLetters"].w[letter] = 1;
+		// upload model, specify matrices and values blocks
+		// specific backprop and backpropless functions
+		sil.forward();
 		
 	}
+	
+	resetLastValues();
 	
 	for (var a = 0; a < length; a++) {
 		
 		var letter = textParser.charToIndex[sentence.charAt(sentence.length - 1)];
 		
-		model["inputLetters"].fillZeros();
-		model["inputLetters"].w[letter] = 1;
+		sil.model["inputLetters"].fillZeros();
+		sil.model["inputLetters"].w[letter] = 1;
 		
-		forwardFunction(a == 0);
+		sil.forward();
 		
-		var temperature = 1;
-		var probabilities = Matrix.softmax(model["output"], temperature);
+		var probabilities = Matrix.softmax(sil.model["output"], sil.temperature);
 		var index = Matrix.sampleRandomSum(probabilities);
 		
 		sentence += textParser.chars.charAt(index);
@@ -146,50 +164,7 @@ function ask (length, prime, forwardFunction) {
 	
 }
 
-function backpropagate () {
-	
-	for (var a = backprop.length - 1; a > -1; a -= 2) {
-		
-		if (backprop[a].length == 1) backprop[a - 1](backprop[a][0]);
-		if (backprop[a].length == 2) backprop[a - 1](backprop[a][0], backprop[a][1]);
-		if (backprop[a].length == 3) backprop[a - 1](backprop[a][0], backprop[a][1], backprop[a][2]);
-		
-	}
-	
-	for (var a in model) {
-		
-		if (!lastWeights[a]) lastWeights[a] = new Matrix(model[a].n, model[a].d);
-		
-		var ma = model[a];
-		var mb = lastWeights[a];
-		
-		for (var b = 0; b < ma.w.length; b++) {
-			
-			mb.w[b] = mb.w[b] * decayRate + (1 - decayRate) * ma.dw[b] * ma.dw[b];
-			
-			var clippedValue = Math.max(-clipValue, Math.min(clipValue, ma.dw[b]));
-			
-			ma.w[b] += -learningRate * clippedValue / Math.sqrt(mb.w[b] + 1e-8) - reguliser * ma.w[b];
-			ma.dw[b] = 0;
-			
-		}
-		
-	}
-	
-}
-
-function forwardLSTM (firstPass) {
-	// move firstpass up
-	if (firstPass) {
-		
-		for (var a = 1; a < layerSizes.length - 1; a++) {
-			
-			model["outputLast" + a] = new Matrix(layerSizes[a], 1);
-			model["cellLast" + a] = new Matrix(layerSizes[a], 1);
-			
-		}
-		
-	}
+function forwardLSTM (model) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
@@ -223,9 +198,7 @@ function forwardLSTM (firstPass) {
 	
 }
 
-function initLSTM () {
-	
-	model = {};
+function initLSTM (model) {
 	
 	model["inputLetters"] = new Matrix(layerSizes[0], 1);
 	
@@ -268,13 +241,86 @@ Stecy.setup = function () {
 
 Art.ready = function () {
 	
-	Stecy.loadFile("input/simple.txt", init);
+	Stecy.loadFile(filePath, init);
 	
 	Art.doStyle(0, "whiteSpace", "pre", "font", "20px monospace", "tabSize", "6", "background", "#333", "color", "#ccc");
 	
 };
 
 (function () {
+	
+	Silicitect = function (initialiseFunction, forwardFunction) {
+		
+		this.reguliser = 1e-8;
+		this.learningRate = 0.1;
+		this.clipValue = 5;
+		this.decayRate = 0.95;
+		this.temperature = 1.0;
+		
+		this.backprop = [];
+		this.recordBackprop = false;
+		this.lastWeights = {};
+		this.model = {};
+		this.initialiseFunction = initialiseFunction;
+		this.forwardFunction = forwardFunction;
+		
+		this.initialise();
+		
+	};
+	
+	Silicitect.prototype.initialise = function () {
+		
+		this.initialiseFunction(this.model);
+		
+		for (var a in this.model) {
+			
+			this.lastWeights[a] = new Matrix(this.model[a].n, this.model[a].d);
+			
+		}
+		
+		return this;
+		
+	};
+	
+	Silicitect.prototype.forward = function () {
+		
+		this.forwardFunction(this.model);
+		
+		return this;
+		
+	};
+	
+	Silicitect.prototype.backpropagate = function () {
+		
+		for (var a = this.backprop.length - 1; a > -1; a -= 2) {
+			
+			if (this.backprop[a].length == 1) this.backprop[a - 1](this.backprop[a][0]);
+			if (this.backprop[a].length == 2) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1]);
+			if (this.backprop[a].length == 3) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1], this.backprop[a][2]);
+			
+		}
+		
+		for (var a in this.model) {
+			
+			var ma = this.model[a];
+			var mb = this.lastWeights[a];
+			
+			for (var b = 0; b < ma.w.length; b++) {
+				
+				mb.w[b] = mb.w[b] * this.decayRate + (1 - this.decayRate) * ma.dw[b] * ma.dw[b];
+				
+				var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, ma.dw[b]));
+				
+				ma.w[b] += -this.learningRate * clippedValue / Math.sqrt(mb.w[b] + 1e-8) - this.reguliser * ma.w[b];
+				ma.dw[b] = 0;
+				
+			}
+			
+		}
+		
+		this.backprop = [];
+		
+	};
 	
 	TextParser = function (text, characterSet) {
 		
@@ -349,6 +395,8 @@ Art.ready = function () {
 		
 	};
 	
+	Matrix.silicitect = null;
+	
 	Matrix.softmax = function (ma, temp) {
 		
 		var out = new Matrix(ma.n, ma.d);
@@ -375,11 +423,7 @@ Art.ready = function () {
 			
 		}
 		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			out.w[a] /= sum;
-			
-		}
+		for (var a = 0; a < ma.w.length; a++) out.w[a] /= sum;
 		
 		return out;
 		
@@ -391,11 +435,7 @@ Art.ready = function () {
 		
 		for (var a = 1; a < ma.w.length; a++) {
 			
-			if (ma.w[a] > ma.w[highest]) {
-				
-				highest = a;
-				
-			}
+			if (ma.w[a] > ma.w[highest]) highest = a;
 			
 		}
 		
@@ -436,8 +476,6 @@ Art.ready = function () {
 	
 	Matrix.multiply = function (ma, mb) {
 		
-		if (ma.d != mb.n) throw new Error("wrong dimensions");
-		
 		var out = new Matrix(ma.n, mb.d);
 		
 		for (var a = 0; a < ma.n; a++) {
@@ -456,7 +494,7 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.multiplyBackward, [ma, mb, out]);
+		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.multiplyBackward, [ma, mb, out]);
 		
 		return out;
 		
@@ -491,7 +529,7 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.elementMultiplyBackward, [ma, mb, out]);
+		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.elementMultiplyBackward, [ma, mb, out]);
 		
 		return out;
 		
@@ -518,7 +556,7 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.addBackward, [ma, mb, out]);
+		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.addBackward, [ma, mb, out]);
 		
 		return out;
 		
@@ -545,7 +583,7 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.sigmoidBackward, [ma, out]);
+		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.sigmoidBackward, [ma, out]);
 		
 		return out;
 		
@@ -571,7 +609,7 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.rectifiedLinearBackward, [ma, out]);
+		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.rectifiedLinearBackward, [ma, out]);
 		
 		return out;
 		
@@ -597,7 +635,7 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.hyperbolicTangentBackward, [ma, out]);
+		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.hyperbolicTangentBackward, [ma, out]);
 		
 		return out;
 		
@@ -623,7 +661,7 @@ Art.ready = function () {
 			
 		}
 		
-		if (recordBackprop) backprop.push(Matrix.rowPluckBackward, [ma, out, row]);
+		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.rowPluckBackward, [ma, out, row]);
 		
 		return out;
 		
