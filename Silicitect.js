@@ -48,50 +48,26 @@ function init (e) {
 function doNetworkStuff () {
 	
 	if (!running || totalIterations >= maxIterations) return;
+	else totalIterations += iterationsPerFrame;
 	
 	var startTime = new Date();
-	var averageLoss = 0;
+	
+	sil.totalLoss = 0;
 	
 	for (var b = 0; b < iterationsPerFrame; b++) {
 		
 		sil.recordBackprop = true;
 		
 		var sentence = textParser.text.substr(Math.floor(uniform() * (textParser.text.length - letterCount)), letterCount);
-		var inputValues = [];
-		var targetValues = [];
-		
-		for (var a = 0; a < sentence.length - 1; a++) {
-			
-			inputValues.push(textParser.charToIndex[sentence.charAt(a)]);
-			
-			if (a < sentence.length - 1) targetValues.push(textParser.charToIndex[sentence.charAt(a + 1)]);
-			
-		}
 		
 		resetLastValues();
 		
-		for (var a = 0; a < inputValues.length; a++) {
+		for (var a = 0; a < sentence.length - 1; a++) {
 			
-			var letter = textParser.charToIndex[inputValues[a]];
-			var nextLetter = textParser.charToIndex[targetValues[a]];
-			
-			sil.model["inputLetters"].fillZeros();
-			sil.model["inputLetters"].w[inputValues[a]] = 1;
-			
+			sil.model["inputLetters"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a)]);
+			sil.model["desiredValues"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a + 1)]);
 			sil.forward();
-			
-			var probabilities = Matrix.softmax(sil.model["output"]);
-			
-			for (var c = 0; c < probabilities.w.length; c++) {
-				
-				sil.model["output"].dw[c] = probabilities.w[c];
-				
-				averageLoss -= Math.log(c == targetValues[a] ? probabilities.w[c] : 1 - probabilities.w[c]);
-				// averageLoss += Math.abs((c == targetValues[a]) - probabilities.w[c]);
-				
-			}
-			
-			sil.model["output"].dw[nextLetter] -= 1;
+			sil.computeLoss("output", "desiredValues", Matrix.softmax, Silicitect.logLoss);
 			
 		}
 		
@@ -99,10 +75,8 @@ function doNetworkStuff () {
 		
 	}
 	
-	totalIterations += iterationsPerFrame;
-	
 	// Art.doClear(0);
-	Art.doWrite(0, totalIterations + " " + (averageLoss / iterationsPerFrame).toFixed(2) + " ");
+	Art.doWrite(0, totalIterations + " " + (sil.totalLoss / iterationsPerFrame).toFixed(2) + " ");
 	Art.doWrite(0, (new Date() - startTime) + "ms " + ask(sampleSize, samplePrime) + "\n");
 	
 }
@@ -134,8 +108,7 @@ function ask (length, prime) {
 		
 		if (!(1 + letter)) continue;
 		
-		sil.model["inputLetters"].fillZeros();
-		sil.model["inputLetters"].w[letter] = 1;
+		sil.model["inputLetters"].fillZerosExcept(letter);
 		// upload model, specify matrices and values blocks
 		// specific backprop and backpropless functions
 		sil.forward();
@@ -148,12 +121,11 @@ function ask (length, prime) {
 		
 		var letter = textParser.charToIndex[sentence.charAt(sentence.length - 1)];
 		
-		sil.model["inputLetters"].fillZeros();
-		sil.model["inputLetters"].w[letter] = 1;
+		sil.model["inputLetters"].fillZerosExcept(letter);
 		
 		sil.forward();
 		
-		var probabilities = Matrix.softmax(sil.model["output"], sil.temperature);
+		var probabilities = Matrix.softmax(sil.model["output"], 1.0);
 		var index = Matrix.sampleRandomSum(probabilities);
 		
 		sentence += textParser.chars.charAt(index);
@@ -227,9 +199,13 @@ function initLSTM (model) {
 		
 	}
 	
-	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseUniform();
-	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1).fillOnes();
-	model["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	var lastLayerSize = layerSizes[layerSizes.length - 1];
+	
+	model["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseNormalised();
+	model["decoderBias"] = new Matrix(lastLayerSize, 1).fillOnes();
+	
+	model["output"] = new Matrix(lastLayerSize, 1);
+	model["desiredValues"] = new Matrix(lastLayerSize, 1);
 	
 }
 
@@ -255,8 +231,8 @@ Art.ready = function () {
 		this.learningRate = 0.1;
 		this.clipValue = 5;
 		this.decayRate = 0.95;
-		this.temperature = 1.0;
 		
+		this.totalLoss = 0;
 		this.backprop = [];
 		this.recordBackprop = false;
 		this.lastWeights = {};
@@ -321,6 +297,53 @@ Art.ready = function () {
 		this.backprop = [];
 		
 	};
+	
+	Silicitect.prototype.computeLoss = function (lossTarget, desiredValues, squashFunction, lossFunction) {
+		
+		var squashed = squashFunction(this.model[lossTarget]);
+		var sum = 0;
+		
+		for (var a = 0; a < squashed.w.length; a++) {
+			//?
+			this.model[lossTarget].dw[a] = squashed.w[a] - this.model[desiredValues].w[a];
+			
+		}
+		
+		if (lossFunction == Silicitect.logLoss) {
+			
+			for (var a = 0; a < squashed.w.length; a++) {
+				
+				sum += -Math.log(Math.abs(1 - this.model[desiredValues].w[a] - squashed.w[a]));
+				
+			}
+			
+		} else if (lossFunction == Silicitect.linearLoss) {
+			
+			for (var a = 0; a < squashed.w.length; a++) {
+				
+				sum += Math.abs(this.model[desiredValues].w[a] - squashed.w[a]);
+				
+			}
+			
+		} else if (lossFunction == Silicitect.binaryLoss) {
+			
+			for (var a = 0; a < squashed.w.length; a++) {
+				
+				sum += Math.round(Math.abs(this.model[desiredValues].w[a] - squashed.w[a]));
+				
+			}
+			
+		}
+		
+		this.totalLoss += sum;
+		
+		return sum;
+		
+	};
+	
+	Silicitect.logLoss = 0;
+	Silicitect.linearLoss = 1;
+	Silicitect.binaryLoss = 2;
 	
 	TextParser = function (text, characterSet) {
 		
@@ -387,6 +410,14 @@ Art.ready = function () {
 		
 	};
 	
+	Matrix.prototype.fillOnesExcept = function (i) {
+		
+		for (var a = 0; a < this.w.length; a++) this.w[a] = a == i ? 0 : 1;
+		
+		return this;
+		
+	};
+	
 	Matrix.prototype.fillZeros = function () {
 		
 		for (var a = 0; a < this.w.length; a++) this.w[a] = 0;
@@ -395,7 +426,29 @@ Art.ready = function () {
 		
 	};
 	
+	Matrix.prototype.fillZerosExcept = function (i) {
+		
+		for (var a = 0; a < this.w.length; a++) this.w[a] = a == i ? 1 : 0;
+		
+		return this;
+		
+	};
+	
 	Matrix.silicitect = null;
+	
+	Matrix.scalar = function (ma, scale) {
+		
+		var out = new Matrix(ma.n, ma.d);
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			ma.w[a] *= scale;
+			
+		}
+		
+		return out;
+		
+	};
 	
 	Matrix.softmax = function (ma, temp) {
 		
