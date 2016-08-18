@@ -20,7 +20,7 @@ var maxIterations = 1e3;
 var letterCount = 10;
 var sampleSize = 50;
 var filePath = "input/simple.txt";
-var samplePrime = "1";
+var samplePrime = "0";
 var totalIterations = 0;
 var layerSizes = [];
 
@@ -29,15 +29,17 @@ var textParser = null;
 
 function init (e) {
 	
+	Art.doStyle(0, "whiteSpace", "pre-wrap");
 	// textParser = new TextParser(e.responseText, "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t" + 
 	// 			"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
 	textParser = new TextParser(e.responseText, "");
-	
-	Art.doStyle(0, "whiteSpace", "pre-wrap");
-	
 	layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
 	
 	sil = new Silicitect(initLSTM, forwardLSTM);
+	sil.reguliser = 1e-8;
+	sil.learningRate = 0.1;
+	sil.clipValue = 5;
+	sil.decayRate = 0.95;
 	
 	Matrix.silicitect = sil;
 	
@@ -50,13 +52,9 @@ function doNetworkStuff () {
 	if (!running || totalIterations >= maxIterations) return;
 	else totalIterations += iterationsPerFrame;
 	
-	var startTime = new Date();
-	
-	sil.totalLoss = 0;
+	sil.startLearningSession();
 	
 	for (var b = 0; b < iterationsPerFrame; b++) {
-		
-		sil.recordBackprop = true;
 		
 		var sentence = textParser.text.substr(Math.floor(uniform() * (textParser.text.length - letterCount)), letterCount);
 		
@@ -74,10 +72,13 @@ function doNetworkStuff () {
 		sil.backpropagate();
 		
 	}
+	//something borke
+	sil.endLearningSession();
 	
 	// Art.doClear(0);
 	Art.doWrite(0, totalIterations + " " + (sil.totalLoss / iterationsPerFrame).toFixed(2) + " ");
-	Art.doWrite(0, (new Date() - startTime) + "ms " + ask(sampleSize, samplePrime) + "\n");
+	Art.doWrite(0, sil.batchTime + "ms " + ask(sampleSize, samplePrime) + "\n");
+	
 	
 }
 
@@ -95,8 +96,6 @@ function resetLastValues () {
 Stecy.sequence("update", [doNetworkStuff]);
 
 function ask (length, prime) {
-	
-	sil.recordBackprop = false;
 	
 	var sentence = prime;
 	
@@ -232,6 +231,7 @@ Art.ready = function () {
 		this.clipValue = 5;
 		this.decayRate = 0.95;
 		
+		this.batchTime = 0;
 		this.totalLoss = 0;
 		this.backprop = [];
 		this.recordBackprop = false;
@@ -255,6 +255,21 @@ Art.ready = function () {
 		}
 		
 		return this;
+		
+	};
+	
+	Silicitect.prototype.startLearningSession = function () {
+		
+		this.totalLoss = 0;
+		this.recordBackprop = true;
+		this.batchTime = new Date();
+		
+	};
+	
+	Silicitect.prototype.endLearningSession = function () {
+		
+		this.recordBackprop = false;
+		this.batchTime = new Date() - this.batchTime;
 		
 	};
 	
