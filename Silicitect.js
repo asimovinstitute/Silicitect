@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>*/
 
 var running = false;
-var iterationsPerFrame = 100;
-var maxIterations = 1e3;
+var iterationsPerFrame = 1000;
+var maxIterations = 3e3;
 var letterCount = 10;
 var sampleSize = 50;
 var filePath = "input/simple.txt";
@@ -32,14 +32,14 @@ function init (e) {
 	Art.doStyle(0, "whiteSpace", "pre-wrap");
 	// textParser = new TextParser(e.responseText, "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t" + 
 	// 			"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
-	textParser = new TextParser(e.responseText, "");
-	layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
+	// textParser = new TextParser(e.responseText, "");
+	layerSizes = [2, 2, 1];
 	
-	sil = new Silicitect(initLSTM, forwardLSTM);
+	sil = new Silicitect(initFF, forwardFF);
 	sil.reguliser = 1e-8;
-	sil.learningRate = 0.1;
+	sil.learningRate = 0.05;
 	sil.clipValue = 5;
-	sil.decayRate = 0.95;
+	sil.decayRate = 0.92;
 	
 	Matrix.silicitect = sil;
 	
@@ -55,7 +55,7 @@ function doNetworkStuff () {
 	sil.startLearningSession();
 	
 	for (var b = 0; b < iterationsPerFrame; b++) {
-		
+		/*
 		var sentence = textParser.text.substr(Math.floor(uniform() * (textParser.text.length - letterCount)), letterCount);
 		
 		resetLastValues();
@@ -70,16 +70,32 @@ function doNetworkStuff () {
 		}
 		
 		sil.backpropagate();
+		*/
+		sil.model["input"].w = [uniform() < 0.5 ? 0 : 1, uniform() < 0.5 ? 0 : 1];
+		sil.model["desiredValues"].w = [sil.model["input"].w[0] + sil.model["input"].w[1] == 1 ? 1 : 0];
+		sil.forward();
+		sil.computeLoss("output", "desiredValues", Matrix.nothing, Silicitect.linearLoss);
+		sil.backpropagate();
 		
 	}
 	//something borke
 	sil.endLearningSession();
 	
 	// Art.doClear(0);
-	Art.doWrite(0, totalIterations + " " + (sil.totalLoss / iterationsPerFrame).toFixed(2) + " ");
-	Art.doWrite(0, sil.batchTime + "ms " + ask(sampleSize, samplePrime) + "\n");
-	
-	
+	Art.doWrite(0, totalIterations + " " + (sil.totalLoss / iterationsPerFrame).toFixed(2) + " " + sil.batchTime + "ms");
+	// Art.doWrite(0, ask(sampleSize, samplePrime) + "\n");
+	sil.model["input"].w = [0, 0];
+	sil.forward();
+	Art.doWrite(0, "\n00 " + sil.model["output"].w[0].toFixed(2) + "\n");
+	sil.model["input"].w = [0, 1];
+	sil.forward();
+	Art.doWrite(0, "01 " + sil.model["output"].w[0].toFixed(2) + "\n");
+	sil.model["input"].w = [1, 0];
+	sil.forward();
+	Art.doWrite(0, "10 " + sil.model["output"].w[0].toFixed(2) + "\n");
+	sil.model["input"].w = [1, 1];
+	sil.forward();
+	Art.doWrite(0, "11 " + sil.model["output"].w[0].toFixed(2) + "\n");
 }
 
 function resetLastValues () {
@@ -132,6 +148,48 @@ function ask (length, prime) {
 	}
 	
 	return sentence.slice(prime.length);
+	
+}
+
+function forwardFF (model) {
+	
+	for (var a = 1; a < layerSizes.length - 1; a++) {
+		
+		var previousLayer = a == 1 ? model["input"] : model["outputLast" + (a - 1)];
+		
+		var h0 = Matrix.multiply(model["hidden" + a], previousLayer);
+		
+		model["outputLast" + a] = Matrix.sigmoid(Matrix.add(h0, model["hiddenBias" + a]));
+		
+	}
+	
+	model["output"] = Matrix.sigmoid(Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]));
+	
+}
+
+function initFF (model) {
+	
+	model["input"] = new Matrix(layerSizes[0], 1);
+	
+	for (var a = 1; a < layerSizes.length - 1; a++) {
+		
+		var prevSize = layerSizes[a - 1];
+		var size = layerSizes[a];
+		
+		model["hidden" + a] = new Matrix(size, prevSize).randomiseNormalised();
+		model["hiddenBias" + a] = new Matrix(size, 1).fillOnes();
+		
+		model["outputLast" + a] = new Matrix(size, 1);
+		
+	}
+	
+	var lastLayerSize = layerSizes[layerSizes.length - 1];
+	
+	model["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseNormalised();
+	model["decoderBias"] = new Matrix(lastLayerSize, 1).fillOnes();
+	
+	model["output"] = new Matrix(lastLayerSize, 1);
+	model["desiredValues"] = new Matrix(lastLayerSize, 1);
 	
 }
 
@@ -542,6 +600,20 @@ Art.ready = function () {
 		
 	};
 	
+	Matrix.nothing = function (ma) {
+		
+		var out = new Matrix(ma.n, ma.d);
+		
+		for (var a = 0; a < ma.w.length; a++) {
+			
+			out.w[a] = ma.w[a];
+			
+		}
+		
+		return out;
+		
+	};
+	
 	Matrix.multiply = function (ma, mb) {
 		
 		var out = new Matrix(ma.n, mb.d);
@@ -779,6 +851,7 @@ function initRNN () {
 	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseNormalised();
 	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	model["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	model["desiredValues"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	
 }
 
@@ -808,23 +881,14 @@ function initGRU () {
 		
 	}
 	
-	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseUniform();
+	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseNormalised();
 	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	model["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	model["desiredValues"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	
 }
 
 function forwardRNN (input, firstPass) {
-	
-	if (firstPass) {
-		
-		for (var a = 1; a < layerSizes.length - 1; a++) {
-			
-			model["outputLast" + a] = new Matrix(layerSizes[a], 1);
-			
-		}
-		
-	}
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
@@ -843,16 +907,6 @@ function forwardRNN (input, firstPass) {
 }
 
 function forwardGRU (input, firstPass) {
-	
-	if (firstPass) {
-		
-		for (var a = 1; a < layerSizes.length - 1; a++) {
-			
-			model["outputLast" + a] = new Matrix(layerSizes[a], 1);
-			
-		}
-		
-	}
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
