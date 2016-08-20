@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>*/
 
 var running = false;
-var iterationsPerFrame = 1000;
-var maxIterations = 3e3;
+var iterationsPerFrame = 100;
+var maxIterations = 1e3;
 var letterCount = 10;
 var sampleSize = 50;
 var filePath = "input/simple.txt";
@@ -30,16 +30,17 @@ var textParser = null;
 function init (e) {
 	
 	Art.doStyle(0, "whiteSpace", "pre-wrap");
-	// textParser = new TextParser(e.responseText, "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t" + 
-	// 			"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
-	// textParser = new TextParser(e.responseText, "");
-	layerSizes = [2, 2, 1];
 	
-	sil = new Silicitect(initFF, forwardFF);
+	// textParser = new TextParser(e.responseText, );
+	textParser = new TextParser(e.responseText, "");
+	layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
+	// layerSizes = [2, 2, 1];
+	
+	sil = new Silicitect(initLSTM, updateLSTM);
 	sil.reguliser = 1e-8;
-	sil.learningRate = 0.05;
+	sil.learningRate = 0.1;
 	sil.clipValue = 5;
-	sil.decayRate = 0.92;
+	sil.decayRate = 0.95;
 	
 	Matrix.silicitect = sil;
 	
@@ -55,47 +56,64 @@ function doNetworkStuff () {
 	sil.startLearningSession();
 	
 	for (var b = 0; b < iterationsPerFrame; b++) {
-		/*
-		var sentence = textParser.text.substr(Math.floor(uniform() * (textParser.text.length - letterCount)), letterCount);
 		
-		resetLastValues();
-		
-		for (var a = 0; a < sentence.length - 1; a++) {
-			
-			sil.model["inputLetters"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a)]);
-			sil.model["desiredValues"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a + 1)]);
-			sil.forward();
-			sil.computeLoss("output", "desiredValues", Matrix.softmax, Silicitect.logLoss);
-			
-		}
-		
-		sil.backpropagate();
-		*/
-		sil.model["input"].w = [uniform() < 0.5 ? 0 : 1, uniform() < 0.5 ? 0 : 1];
-		sil.model["desiredValues"].w = [sil.model["input"].w[0] + sil.model["input"].w[1] == 1 ? 1 : 0];
-		sil.forward();
-		sil.computeLoss("output", "desiredValues", Matrix.nothing, Silicitect.linearLoss);
-		sil.backpropagate();
+		trainCharacterSequence();
 		
 	}
-	//something borke
+	
 	sil.endLearningSession();
 	
 	// Art.doClear(0);
 	Art.doWrite(0, totalIterations + " " + (sil.totalLoss / iterationsPerFrame).toFixed(2) + " " + sil.batchTime + "ms");
-	// Art.doWrite(0, ask(sampleSize, samplePrime) + "\n");
+	
+	printCharacterSequenceOutput();
+	
+}
+
+function trainLogicGate () {
+	
+	sil.model["input"].w = [uniform() > 0.5, uniform() > 0.5];
+	sil.model["desiredValues"].w = [sil.model["input"].w[0] + sil.model["input"].w[1] > 0];
+	sil.update();
+	sil.computeLoss("output", "desiredValues", Matrix.nothing, Silicitect.linearLoss);
+	sil.backpropagate();
+	
+}
+
+function printLogicGateOutput () {
+	
 	sil.model["input"].w = [0, 0];
-	sil.forward();
+	sil.update();
 	Art.doWrite(0, "\n00 " + sil.model["output"].w[0].toFixed(2) + "\n");
 	sil.model["input"].w = [0, 1];
-	sil.forward();
+	sil.update();
 	Art.doWrite(0, "01 " + sil.model["output"].w[0].toFixed(2) + "\n");
 	sil.model["input"].w = [1, 0];
-	sil.forward();
+	sil.update();
 	Art.doWrite(0, "10 " + sil.model["output"].w[0].toFixed(2) + "\n");
 	sil.model["input"].w = [1, 1];
-	sil.forward();
+	sil.update();
 	Art.doWrite(0, "11 " + sil.model["output"].w[0].toFixed(2) + "\n");
+	
+}
+
+function trainCharacterSequence () {
+	
+	var sentence = textParser.text.substr(Math.floor(uniform() * (textParser.text.length - letterCount)), letterCount);
+	
+	resetLastValues();
+	
+	for (var a = 0; a < sentence.length - 1; a++) {
+		
+		sil.model["inputLetters"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a)]);
+		sil.model["desiredValues"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a + 1)]);
+		sil.update();
+		sil.computeLoss("output", "desiredValues", Matrix.softmax, Silicitect.logLoss);
+		
+	}
+	
+	sil.backpropagate();
+	
 }
 
 function resetLastValues () {
@@ -111,7 +129,13 @@ function resetLastValues () {
 
 Stecy.sequence("update", [doNetworkStuff]);
 
-function ask (length, prime) {
+function printCharacterSequenceOutput () {
+	
+	Art.doWrite(0, "\n" + generateSentence(sampleSize, samplePrime) + "\n");
+	
+}
+
+function generateSentence (length, prime) {
 	
 	var sentence = prime;
 	
@@ -124,9 +148,7 @@ function ask (length, prime) {
 		if (!(1 + letter)) continue;
 		
 		sil.model["inputLetters"].fillZerosExcept(letter);
-		// upload model, specify matrices and values blocks
-		// specific backprop and backpropless functions
-		sil.forward();
+		sil.update();
 		
 	}
 	
@@ -138,7 +160,7 @@ function ask (length, prime) {
 		
 		sil.model["inputLetters"].fillZerosExcept(letter);
 		
-		sil.forward();
+		sil.update();
 		
 		var probabilities = Matrix.softmax(sil.model["output"], 1.0);
 		var index = Matrix.sampleRandomSum(probabilities);
@@ -151,7 +173,7 @@ function ask (length, prime) {
 	
 }
 
-function forwardFF (model) {
+function updateFF (model) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
@@ -193,7 +215,7 @@ function initFF (model) {
 	
 }
 
-function forwardLSTM (model) {
+function updateLSTM (model) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
@@ -282,7 +304,7 @@ Art.ready = function () {
 
 (function () {
 	
-	Silicitect = function (initialiseFunction, forwardFunction) {
+	Silicitect = function (initialiseFunction, updateFunction) {
 		
 		this.reguliser = 1e-8;
 		this.learningRate = 0.1;
@@ -296,7 +318,7 @@ Art.ready = function () {
 		this.lastWeights = {};
 		this.model = {};
 		this.initialiseFunction = initialiseFunction;
-		this.forwardFunction = forwardFunction;
+		this.updateFunction = updateFunction;
 		
 		this.initialise();
 		
@@ -331,9 +353,9 @@ Art.ready = function () {
 		
 	};
 	
-	Silicitect.prototype.forward = function () {
+	Silicitect.prototype.update = function () {
 		
-		this.forwardFunction(this.model);
+		this.updateFunction(this.model);
 		
 		return this;
 		
@@ -378,7 +400,7 @@ Art.ready = function () {
 		
 		for (var a = 0; a < squashed.w.length; a++) {
 			//?
-			this.model[lossTarget].dw[a] = squashed.w[a] - this.model[desiredValues].w[a];
+			this.model[lossTarget].dw[a] = -1 * (this.model[desiredValues].w[a] - squashed.w[a]);
 			
 		}
 		
@@ -442,6 +464,9 @@ Art.ready = function () {
 		}
 		
 	};
+	
+	TextParser.predefinedCharacterSet = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t" + 
+										"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 	
 	Matrix = function (n, d) {
 		
@@ -888,7 +913,7 @@ function initGRU () {
 	
 }
 
-function forwardRNN (input, firstPass) {
+function updateRNN (input, firstPass) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
@@ -906,7 +931,7 @@ function forwardRNN (input, firstPass) {
 	
 }
 
-function forwardGRU (input, firstPass) {
+function updateGRU (input, firstPass) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
