@@ -111,7 +111,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		var sum = 0;
 		
 		for (var a = 0; a < squashed.w.length; a++) {
-			//?
+			
 			this.network[lossTarget].dw[a] = -1 * (this.network[desiredValues].w[a] - squashed.w[a]);
 			
 		}
@@ -120,7 +120,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			for (var a = 0; a < squashed.w.length; a++) {
 				
-				sum += -Math.log(Math.abs(1 - this.network[desiredValues].w[a] - squashed.w[a]));
+				sum += -Math.log(1e-10 + Math.abs(1 - this.network[desiredValues].w[a] - squashed.w[a]));
 				
 			}
 			
@@ -151,6 +151,16 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	Silicitect.logLoss = 0;
 	Silicitect.linearLoss = 1;
 	Silicitect.binaryLoss = 2;
+	
+	Random = {rgn:0, seed:0};
+	
+	Random.uniform = function () {
+		
+		Random.rgn = (4321421413 * Random.rgn + 432194612 + Random.seed) % 43214241 * (79143569 + Random.seed);
+		
+		return 1e-10 * (Random.rgn % 1e10);
+		
+	};
 	
 	TextParser = function (text, characterSet) {
 		
@@ -198,7 +208,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.prototype.randomiseUniform = function () {
 		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = uniform();
+		for (var a = 0; a < this.w.length; a++) this.w[a] = Random.uniform();
 		
 		return this;
 		
@@ -206,7 +216,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.prototype.randomiseNormalised = function (base, range) {
 		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = uniform() / Math.sqrt(this.d);
+		for (var a = 0; a < this.w.length; a++) this.w[a] = Random.uniform() / Math.sqrt(this.d);
 		
 		return this;
 		
