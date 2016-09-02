@@ -16,37 +16,22 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 
 (function () {
 	
-	Silicitect = function (initialiseFunction, updateFunction) {
+	Silicitect = function (initialiser, updater) {
 		
 		this.reguliser = 1e-8;
-		this.learningRate = 0.1;
+		this.learningRate = 0.001;
 		this.clipValue = 5;
 		this.decayRate = 0.95;
 		
 		this.batchTime = 0;
 		this.totalLoss = 0;
 		this.backprop = [];
-		this.recordBackprop = false;
-		this.lastWeights = {};
 		this.network = {};
-		this.initialiseFunction = initialiseFunction;
-		this.updateFunction = updateFunction;
+		this.recordBackprop = false;
+		this.initialise = initialiser;
+		this.update = updater;
 		
 		this.initialise();
-		
-	};
-	
-	Silicitect.prototype.initialise = function () {
-		
-		this.initialiseFunction(this.network);
-		
-		for (var a in this.network) {
-			
-			this.lastWeights[a] = new Matrix(this.network[a].n, this.network[a].d);
-			
-		}
-		
-		return this;
 		
 	};
 	
@@ -65,14 +50,6 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Silicitect.prototype.update = function () {
-		
-		this.updateFunction(this.network);
-		
-		return this;
-		
-	};
-	
 	Silicitect.prototype.backpropagate = function () {
 		
 		for (var a = this.backprop.length - 1; a > -1; a -= 2) {
@@ -86,15 +63,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		for (var a in this.network) {
 			
 			var ma = this.network[a];
-			var mb = this.lastWeights[a];
 			
 			for (var b = 0; b < ma.w.length; b++) {
 				
-				mb.w[b] = mb.w[b] * this.decayRate + (1 - this.decayRate) * ma.dw[b] * ma.dw[b];
+				ma.lw[b] = ma.lw[b] * this.decayRate + (1 - this.decayRate) * ma.dw[b] * ma.dw[b];
 				
 				var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, ma.dw[b]));
 				
-				ma.w[b] += -this.learningRate * clippedValue / Math.sqrt(mb.w[b] + 1e-8) - this.reguliser * ma.w[b];
+				ma.w[b] += -this.learningRate * clippedValue / Math.sqrt(ma.lw[b] + 1e-8) - this.reguliser * ma.w[b];
 				ma.dw[b] = 0;
 				
 			}
@@ -196,15 +172,23 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		this.d = d;
 		this.w = [];
 		this.dw = [];
+		this.lw = [];
 		
 		for (var a = 0; a < n * d; a++) {
 			
 			this.w[a] = 0;
 			this.dw[a] = 0;
+			this.lw[a] = 0;
 			
 		}
 		
 	};
+	
+	// two buffer orders, to increase reuse
+	Matrix.c = 0;
+	Matrix.w = new Float64Array(1e7);
+	Matrix.dw = new Float64Array(1e7);
+	Matrix.lw = new Float64Array(1e7);
 	
 	Matrix.prototype.randomiseUniform = function () {
 		
