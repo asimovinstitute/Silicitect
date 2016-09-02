@@ -28,7 +28,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		this.backprop = [];
 		this.recordBackprop = false;
 		this.lastWeights = {};
-		this.model = {};
+		this.network = {};
 		this.initialiseFunction = initialiseFunction;
 		this.updateFunction = updateFunction;
 		
@@ -38,11 +38,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Silicitect.prototype.initialise = function () {
 		
-		this.initialiseFunction(this.model);
+		this.initialiseFunction(this.network);
 		
-		for (var a in this.model) {
+		for (var a in this.network) {
 			
-			this.lastWeights[a] = new Matrix(this.model[a].n, this.model[a].d);
+			this.lastWeights[a] = new Matrix(this.network[a].n, this.network[a].d);
 			
 		}
 		
@@ -67,7 +67,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Silicitect.prototype.update = function () {
 		
-		this.updateFunction(this.model);
+		this.updateFunction(this.network);
 		
 		return this;
 		
@@ -83,9 +83,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		for (var a in this.model) {
+		for (var a in this.network) {
 			
-			var ma = this.model[a];
+			var ma = this.network[a];
 			var mb = this.lastWeights[a];
 			
 			for (var b = 0; b < ma.w.length; b++) {
@@ -107,12 +107,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Silicitect.prototype.computeLoss = function (lossTarget, desiredValues, squashFunction, lossFunction) {
 		
-		var squashed = squashFunction(this.model[lossTarget]);
+		var squashed = squashFunction(this.network[lossTarget]);
 		var sum = 0;
 		
 		for (var a = 0; a < squashed.w.length; a++) {
 			//?
-			this.model[lossTarget].dw[a] = -1 * (this.model[desiredValues].w[a] - squashed.w[a]);
+			this.network[lossTarget].dw[a] = -1 * (this.network[desiredValues].w[a] - squashed.w[a]);
 			
 		}
 		
@@ -120,7 +120,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			for (var a = 0; a < squashed.w.length; a++) {
 				
-				sum += -Math.log(Math.abs(1 - this.model[desiredValues].w[a] - squashed.w[a]));
+				sum += -Math.log(Math.abs(1 - this.network[desiredValues].w[a] - squashed.w[a]));
 				
 			}
 			
@@ -128,7 +128,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			for (var a = 0; a < squashed.w.length; a++) {
 				
-				sum += Math.abs(this.model[desiredValues].w[a] - squashed.w[a]);
+				sum += Math.abs(this.network[desiredValues].w[a] - squashed.w[a]);
 				
 			}
 			
@@ -136,7 +136,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			for (var a = 0; a < squashed.w.length; a++) {
 				
-				sum += Math.round(Math.abs(this.model[desiredValues].w[a] - squashed.w[a]));
+				sum += Math.round(Math.abs(this.network[desiredValues].w[a] - squashed.w[a]));
 				
 			}
 			

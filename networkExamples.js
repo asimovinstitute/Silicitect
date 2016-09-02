@@ -40,15 +40,12 @@ Art.ready = function () {
 	
 	Stecy.loadFile(filePath, init);
 	
-	Art.doStyle(0, "whiteSpace", "pre", "font", "20px monospace", "tabSize", "6", "background", "#333", "color", "#ccc");
+	Art.doStyle(0, "whiteSpace", "pre-wrap", "font", "20px monospace", "tabSize", "6", "background", "#333", "color", "#ccc");
 	
 };
 
 function init (e) {
 	
-	Art.doStyle(0, "whiteSpace", "pre-wrap");
-	
-	// textParser = new TextParser(e.responseText, );
 	textParser = new TextParser(e.responseText, "");
 	layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
 	// layerSizes = [2, 2, 1];
@@ -84,7 +81,7 @@ function doNetworkStuff () {
 	
 	// Art.doClear(0);
 	Art.doWrite(0, totalIterations + " " + (sil.totalLoss / iterationsPerFrame).toFixed(2) + " " + sil.batchTime + "ms" +
-					" avg " + (averageBatchTime / (totalIterations / iterationsPerFrame)).toFixed(2));
+					" avg " + (averageBatchTime / (totalIterations / iterationsPerFrame)).toFixed(0));
 	
 	printCharacterSequenceOutput();
 	
@@ -92,8 +89,8 @@ function doNetworkStuff () {
 
 function trainLogicGate () {
 	
-	sil.model["input"].w = [uniform() > 0.5, uniform() > 0.5];
-	sil.model["desiredValues"].w = [sil.model["input"].w[0] + sil.model["input"].w[1] > 0];
+	sil.network["input"].w = [uniform() > 0.5, uniform() > 0.5];
+	sil.network["desiredValues"].w = [sil.network["input"].w[0] + sil.network["input"].w[1] > 0];
 	sil.update();
 	sil.computeLoss("output", "desiredValues", Matrix.nothing, Silicitect.linearLoss);
 	sil.backpropagate();
@@ -102,18 +99,18 @@ function trainLogicGate () {
 
 function printLogicGateOutput () {
 	
-	sil.model["input"].w = [0, 0];
+	sil.network["input"].w = [0, 0];
 	sil.update();
-	Art.doWrite(0, "\n00 " + sil.model["output"].w[0].toFixed(2) + "\n");
-	sil.model["input"].w = [0, 1];
+	Art.doWrite(0, "\n00 " + sil.network["output"].w[0].toFixed(2) + "\n");
+	sil.network["input"].w = [0, 1];
 	sil.update();
-	Art.doWrite(0, "01 " + sil.model["output"].w[0].toFixed(2) + "\n");
-	sil.model["input"].w = [1, 0];
+	Art.doWrite(0, "01 " + sil.network["output"].w[0].toFixed(2) + "\n");
+	sil.network["input"].w = [1, 0];
 	sil.update();
-	Art.doWrite(0, "10 " + sil.model["output"].w[0].toFixed(2) + "\n");
-	sil.model["input"].w = [1, 1];
+	Art.doWrite(0, "10 " + sil.network["output"].w[0].toFixed(2) + "\n");
+	sil.network["input"].w = [1, 1];
 	sil.update();
-	Art.doWrite(0, "11 " + sil.model["output"].w[0].toFixed(2) + "\n");
+	Art.doWrite(0, "11 " + sil.network["output"].w[0].toFixed(2) + "\n");
 	
 }
 
@@ -125,8 +122,8 @@ function trainCharacterSequence () {
 	
 	for (var a = 0; a < sentence.length - 1; a++) {
 		
-		sil.model["inputLetters"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a)]);
-		sil.model["desiredValues"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a + 1)]);
+		sil.network["inputLetters"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a)]);
+		sil.network["desiredValues"].fillZerosExcept(textParser.charToIndex[sentence.charAt(a + 1)]);
 		sil.update();
 		sil.computeLoss("output", "desiredValues", Matrix.softmax, Silicitect.logLoss);
 		
@@ -154,7 +151,7 @@ function generateSentence (length, prime) {
 		
 		if (!(1 + letter)) continue;
 		
-		sil.model["inputLetters"].fillZerosExcept(letter);
+		sil.network["inputLetters"].fillZerosExcept(letter);
 		sil.update();
 		
 	}
@@ -165,11 +162,11 @@ function generateSentence (length, prime) {
 		
 		var letter = textParser.charToIndex[sentence.charAt(sentence.length - 1)];
 		
-		sil.model["inputLetters"].fillZerosExcept(letter);
+		sil.network["inputLetters"].fillZerosExcept(letter);
 		
 		sil.update();
 		
-		var probabilities = Matrix.softmax(sil.model["output"], 1.0);
+		var probabilities = Matrix.softmax(sil.network["output"], 1.0);
 		var index = Matrix.sampleRandomSum(probabilities);
 		
 		sentence += textParser.chars.charAt(index);
@@ -184,150 +181,152 @@ function resetLastValues () {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		sil.model["outputLast" + a].fillZeros();
-		sil.model["cellLast" + a].fillZeros();
+		sil.network["outputLast" + a].fillZeros();
+		sil.network["cellLast" + a].fillZeros();
 		
 	}
 	
 }
 
-function updateFF (model) {
+var networks = {};
+
+function updateFF (network) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		var previousLayer = a == 1 ? model["input"] : model["outputLast" + (a - 1)];
+		var previousLayer = a == 1 ? network["input"] : network["outputLast" + (a - 1)];
 		
-		var h0 = Matrix.multiply(model["hidden" + a], previousLayer);
+		var h0 = Matrix.multiply(network["hidden" + a], previousLayer);
 		
-		model["outputLast" + a] = Matrix.sigmoid(Matrix.add(h0, model["hiddenBias" + a]));
+		network["outputLast" + a] = Matrix.sigmoid(Matrix.add(h0, network["hiddenBias" + a]));
 		
 	}
 	
-	model["output"] = Matrix.sigmoid(Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]));
+	network["output"] = Matrix.sigmoid(Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]));
 	
 }
 
-function initFF (model) {
+function initFF (network) {
 	
-	model["input"] = new Matrix(layerSizes[0], 1);
+	network["input"] = new Matrix(layerSizes[0], 1);
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
 		var prevSize = layerSizes[a - 1];
 		var size = layerSizes[a];
 		
-		model["hidden" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		model["hiddenBias" + a] = new Matrix(size, 1).fillOnes();
+		network["hidden" + a] = new Matrix(size, prevSize).randomiseNormalised();
+		network["hiddenBias" + a] = new Matrix(size, 1).fillOnes();
 		
-		model["outputLast" + a] = new Matrix(size, 1);
+		network["outputLast" + a] = new Matrix(size, 1);
 		
 	}
 	
 	var lastLayerSize = layerSizes[layerSizes.length - 1];
 	
-	model["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseNormalised();
-	model["decoderBias"] = new Matrix(lastLayerSize, 1).fillOnes();
+	network["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseNormalised();
+	network["decoderBias"] = new Matrix(lastLayerSize, 1).fillOnes();
 	
-	model["output"] = new Matrix(lastLayerSize, 1);
-	model["desiredValues"] = new Matrix(lastLayerSize, 1);
+	network["output"] = new Matrix(lastLayerSize, 1);
+	network["desiredValues"] = new Matrix(lastLayerSize, 1);
 	
 }
 
-function updateLSTM (model) {
+function updateLSTM (network) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		var previousLayer = a == 1 ? model["inputLetters"] : model["outputLast" + (a - 1)];
+		var previousLayer = a == 1 ? network["inputLetters"] : network["outputLast" + (a - 1)];
 		
-		var h0 = Matrix.multiply(model["input" + a], previousLayer);
-		var h1 = Matrix.multiply(model["inputHidden" + a], model["outputLast" + a]);
-		var inputGate = Matrix.sigmoid(Matrix.add(Matrix.add(h0, h1), model["inputBias" + a]));
+		var h0 = Matrix.multiply(network["input" + a], previousLayer);
+		var h1 = Matrix.multiply(network["inputHidden" + a], network["outputLast" + a]);
+		var inputGate = Matrix.sigmoid(Matrix.add(Matrix.add(h0, h1), network["inputBias" + a]));
 		
-		var h2 = Matrix.multiply(model["forget" + a], previousLayer);
-		var h3 = Matrix.multiply(model["forgetHidden" + a], model["outputLast" + a]);
-		var forgetGate = Matrix.sigmoid(Matrix.add(Matrix.add(h2, h3), model["forgetBias" + a]));
+		var h2 = Matrix.multiply(network["forget" + a], previousLayer);
+		var h3 = Matrix.multiply(network["forgetHidden" + a], network["outputLast" + a]);
+		var forgetGate = Matrix.sigmoid(Matrix.add(Matrix.add(h2, h3), network["forgetBias" + a]));
 		
-		var h4 = Matrix.multiply(model["output" + a], previousLayer);
-		var h5 = Matrix.multiply(model["outputHidden" + a], model["outputLast" + a]);
-		var outputGate = Matrix.sigmoid(Matrix.add(Matrix.add(h4, h5), model["outputBias" + a]));
+		var h4 = Matrix.multiply(network["output" + a], previousLayer);
+		var h5 = Matrix.multiply(network["outputHidden" + a], network["outputLast" + a]);
+		var outputGate = Matrix.sigmoid(Matrix.add(Matrix.add(h4, h5), network["outputBias" + a]));
 		
-		var h6 = Matrix.multiply(model["cell" + a], previousLayer);
-		var h7 = Matrix.multiply(model["cellHidden" + a], model["outputLast" + a]);
-		var cellWrite = Matrix.hyperbolicTangent(Matrix.add(Matrix.add(h6, h7), model["cellBias" + a]));
+		var h6 = Matrix.multiply(network["cell" + a], previousLayer);
+		var h7 = Matrix.multiply(network["cellHidden" + a], network["outputLast" + a]);
+		var cellWrite = Matrix.hyperbolicTangent(Matrix.add(Matrix.add(h6, h7), network["cellBias" + a]));
 		
-		var retain = Matrix.elementMultiply(forgetGate, model["cellLast" + a]);
+		var retain = Matrix.elementMultiply(forgetGate, network["cellLast" + a]);
 		var write = Matrix.elementMultiply(inputGate, cellWrite);
 		
-		model["cellLast" + a] = Matrix.add(retain, write);
-		model["outputLast" + a] = Matrix.elementMultiply(outputGate, Matrix.hyperbolicTangent(model["cellLast" + a]));
+		network["cellLast" + a] = Matrix.add(retain, write);
+		network["outputLast" + a] = Matrix.elementMultiply(outputGate, Matrix.hyperbolicTangent(network["cellLast" + a]));
 		
 	}
 	
-	model["output"] = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]);
+	network["output"] = Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]);
 	
 }
 
-function initLSTM (model) {
+function initLSTM (network) {
 	
-	model["inputLetters"] = new Matrix(layerSizes[0], 1);
+	network["inputLetters"] = new Matrix(layerSizes[0], 1);
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
 		var prevSize = layerSizes[a - 1];
 		var size = layerSizes[a];
 		
-		model["input" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		model["inputHidden" + a] = new Matrix(size, size).randomiseNormalised();
-		model["inputBias" + a] = new Matrix(size, 1).fillOnes();
+		network["input" + a] = new Matrix(size, prevSize).randomiseNormalised();
+		network["inputHidden" + a] = new Matrix(size, size).randomiseNormalised();
+		network["inputBias" + a] = new Matrix(size, 1).fillOnes();
 		
-		model["forget" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		model["forgetHidden" + a] = new Matrix(size, size).randomiseNormalised();
-		model["forgetBias" + a] = new Matrix(size, 1).fillOnes();
+		network["forget" + a] = new Matrix(size, prevSize).randomiseNormalised();
+		network["forgetHidden" + a] = new Matrix(size, size).randomiseNormalised();
+		network["forgetBias" + a] = new Matrix(size, 1).fillOnes();
 		
-		model["output" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		model["outputHidden" + a] = new Matrix(size, size).randomiseNormalised();
-		model["outputBias" + a] = new Matrix(size, 1).fillOnes();
-		model["outputLast" + a] = new Matrix(size, 1);
+		network["output" + a] = new Matrix(size, prevSize).randomiseNormalised();
+		network["outputHidden" + a] = new Matrix(size, size).randomiseNormalised();
+		network["outputBias" + a] = new Matrix(size, 1).fillOnes();
+		network["outputLast" + a] = new Matrix(size, 1);
 		
-		model["cell" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		model["cellHidden" + a] = new Matrix(size, size).randomiseNormalised();
-		model["cellBias" + a] = new Matrix(size, 1).fillOnes();
-		model["cellLast" + a] = new Matrix(size, 1);
+		network["cell" + a] = new Matrix(size, prevSize).randomiseNormalised();
+		network["cellHidden" + a] = new Matrix(size, size).randomiseNormalised();
+		network["cellBias" + a] = new Matrix(size, 1).fillOnes();
+		network["cellLast" + a] = new Matrix(size, 1);
 		
 	}
 	
 	var lastLayerSize = layerSizes[layerSizes.length - 1];
 	
-	model["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseNormalised();
-	model["decoderBias"] = new Matrix(lastLayerSize, 1).fillOnes();
+	network["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseNormalised();
+	network["decoderBias"] = new Matrix(lastLayerSize, 1).fillOnes();
 	
-	model["output"] = new Matrix(lastLayerSize, 1);
-	model["desiredValues"] = new Matrix(lastLayerSize, 1);
+	network["output"] = new Matrix(lastLayerSize, 1);
+	network["desiredValues"] = new Matrix(lastLayerSize, 1);
 	
 }
 
 function initRNN () {
 	
-	model = {};
+	network = {};
 	
-	model["inputLetters"] = new Matrix(layerSizes[0], 1).randomiseNormalised();
+	network["inputLetters"] = new Matrix(layerSizes[0], 1).randomiseNormalised();
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
 		var prevSize = layerSizes[a - 1];
 		
-		model["cell" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
-		model["cellHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
-		model["cellBias" + a] = new Matrix(layerSizes[a], 1);
+		network["cell" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
+		network["cellHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
+		network["cellBias" + a] = new Matrix(layerSizes[a], 1);
 		
-		model["outputLast" + a] = new Matrix(layerSizes[a], 1);
+		network["outputLast" + a] = new Matrix(layerSizes[a], 1);
 		
 	}
 	
-	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseNormalised();
-	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
-	model["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
-	model["desiredValues"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	network["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseNormalised();
+	network["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	network["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	network["desiredValues"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	
 }
 
@@ -335,50 +334,50 @@ function updateRNN (input, firstPass) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		var previousLayer = a == 1 ? Matrix.rowPluck(model["inputLetters"], input) : model["outputLast" + (a - 1)];
+		var previousLayer = a == 1 ? Matrix.rowPluck(network["inputLetters"], input) : network["outputLast" + (a - 1)];
 		
-		var h0 = Matrix.multiply(model["cell" + a], previousLayer);
-		var h1 = Matrix.multiply(model["cellHidden" + a], model["outputLast" + a]);
-		var hiddenValues = Matrix.rectifiedLinear(Matrix.add(Matrix.add(h0, h1), model["cellBias" + a]));
+		var h0 = Matrix.multiply(network["cell" + a], previousLayer);
+		var h1 = Matrix.multiply(network["cellHidden" + a], network["outputLast" + a]);
+		var hiddenValues = Matrix.rectifiedLinear(Matrix.add(Matrix.add(h0, h1), network["cellBias" + a]));
 		
-		model["outputLast" + a] = hiddenValues;
+		network["outputLast" + a] = hiddenValues;
 		
 	}
 	
-	model["output"] = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]);
+	network["output"] = Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]);
 	
 }
 
 function initGRU () {
 	
-	model = {};
+	network = {};
 	
-	model["inputLetters"] = new Matrix(layerSizes[0], 1).randomiseNormalised();
+	network["inputLetters"] = new Matrix(layerSizes[0], 1).randomiseNormalised();
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
 		var prevSize = layerSizes[a - 1];
 		
-		model["update" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
-		model["updateHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
-		model["updateBias" + a] = new Matrix(layerSizes[a], 1);
+		network["update" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
+		network["updateHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
+		network["updateBias" + a] = new Matrix(layerSizes[a], 1);
 		
-		model["reset" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
-		model["resetHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
-		model["resetBias" + a] = new Matrix(layerSizes[a], 1);
+		network["reset" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
+		network["resetHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
+		network["resetBias" + a] = new Matrix(layerSizes[a], 1);
 		
-		model["cell" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
-		model["cellHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
-		model["cellBias" + a] = new Matrix(layerSizes[a], 1);
+		network["cell" + a] = new Matrix(layerSizes[a], prevSize).randomiseNormalised();
+		network["cellHidden" + a] = new Matrix(layerSizes[a], layerSizes[a]).randomiseNormalised();
+		network["cellBias" + a] = new Matrix(layerSizes[a], 1);
 		
-		model["outputLast" + a] = new Matrix(layerSizes[a], 1);
+		network["outputLast" + a] = new Matrix(layerSizes[a], 1);
 		
 	}
 	
-	model["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseNormalised();
-	model["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
-	model["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
-	model["desiredValues"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	network["decoder"] = new Matrix(layerSizes[layerSizes.length - 1], layerSizes[layerSizes.length - 2]).randomiseNormalised();
+	network["decoderBias"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	network["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
+	network["desiredValues"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	
 }
 
@@ -386,25 +385,25 @@ function updateGRU (input, firstPass) {
 	
 	for (var a = 1; a < layerSizes.length - 1; a++) {
 		
-		var previousLayer = a == 1 ? Matrix.rowPluck(model["inputLetters"], input) : model["outputLast" + (a - 1)];
+		var previousLayer = a == 1 ? Matrix.rowPluck(network["inputLetters"], input) : network["outputLast" + (a - 1)];
 		
-		var h0 = Matrix.multiply(model["update" + a], previousLayer);
-		var h1 = Matrix.multiply(model["updateHidden" + a], model["outputLast" + a]);
-		var updateGate = Matrix.sigmoid(Matrix.add(Matrix.add(h0, h1), model["updateBias" + a]));
+		var h0 = Matrix.multiply(network["update" + a], previousLayer);
+		var h1 = Matrix.multiply(network["updateHidden" + a], network["outputLast" + a]);
+		var updateGate = Matrix.sigmoid(Matrix.add(Matrix.add(h0, h1), network["updateBias" + a]));
 		
-		var h2 = Matrix.multiply(model["reset" + a], previousLayer);
-		var h3 = Matrix.multiply(model["resetHidden" + a], model["outputLast" + a]);
-		var resetGate = Matrix.sigmoid(Matrix.add(Matrix.add(h2, h3), model["resetBias" + a]));
+		var h2 = Matrix.multiply(network["reset" + a], previousLayer);
+		var h3 = Matrix.multiply(network["resetHidden" + a], network["outputLast" + a]);
+		var resetGate = Matrix.sigmoid(Matrix.add(Matrix.add(h2, h3), network["resetBias" + a]));
 		
-		var h6 = Matrix.multiply(model["cell" + a], Matrix.elementMultiply(previousLayer, resetGate));
-		var h7 = Matrix.multiply(model["cellHidden" + a], model["outputLast" + a]);
-		var cellWrite = Matrix.hyperbolicTangent(Matrix.add(Matrix.add(h6, h7), model["cellBias" + a]));
+		var h6 = Matrix.multiply(network["cell" + a], Matrix.elementMultiply(previousLayer, resetGate));
+		var h7 = Matrix.multiply(network["cellHidden" + a], network["outputLast" + a]);
+		var cellWrite = Matrix.hyperbolicTangent(Matrix.add(Matrix.add(h6, h7), network["cellBias" + a]));
 		
-		model["outputLast" + a] = Matrix.add(Matrix.elementMultiply(Matrix.invert(updateGate), cellWrite), Matrix.elementMultiply(updateGate, model["outputLast" + a]));
+		network["outputLast" + a] = Matrix.add(Matrix.elementMultiply(Matrix.invert(updateGate), cellWrite), Matrix.elementMultiply(updateGate, network["outputLast" + a]));
 		
 	}
 	
-	model["output"] = Matrix.add(Matrix.multiply(model["decoder"], model["outputLast" + (layerSizes.length - 2)]), model["decoderBias"]);
+	network["output"] = Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]);
 	
 }
 
