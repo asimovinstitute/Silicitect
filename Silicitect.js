@@ -212,33 +212,17 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Matrix.prototype.fillOnes = function () {
+	Matrix.prototype.fill = function (va) {
 		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = 1;
-		
-		return this;
-		
-	};
-	
-	Matrix.prototype.fillOnesExcept = function (i) {
-		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = a == i ? 0 : 1;
+		for (var a = 0; a < this.w.length; a++) this.w[a] = va;
 		
 		return this;
 		
 	};
 	
-	Matrix.prototype.fillZeros = function () {
+	Matrix.prototype.fillExcept = function (va, i, vb) {
 		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = 0;
-		
-		return this;
-		
-	};
-	
-	Matrix.prototype.fillZerosExcept = function (i) {
-		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = a == i ? 1 : 0;
+		for (var a = 0; a < this.w.length; a++) this.w[a] = a == i ? vb : va;
 		
 		return this;
 		
