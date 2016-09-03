@@ -60,7 +60,7 @@ function init (e) {
 	// layerSizes = [2, 5, 1];
 	// layerSizes = [5, 4, 3, 4, 5];
 	
-	sil = new Silicitect(examples.initLSTM, examples.updateLSTM);
+	sil = new Silicitect(examples.initAE, examples.updateAE);
 	
 	sil.reguliser = 1e-8;
 	sil.learningRate = 0.05;
@@ -82,9 +82,9 @@ function doNetworkStuff () {
 	
 	for (var b = 0; b < iterationsPerFrame; b++) {
 		
-		// trainAutoencoder();
+		trainAutoencoder();
 		// trainLogicGate();
-		trainCharacterSequence();
+		// trainCharacterSequence();
 		
 	}
 	
@@ -97,9 +97,9 @@ function doNetworkStuff () {
 	Art.doWrite(0, " avg " + (averageBatchTime / (totalIterations / iterationsPerFrame)).toFixed(0));
 	
 	// drawAutoencoder();
-	// printAutoencoder();
+	printAutoencoder();
 	// printLogicGate();
-	printCharacterSequence();
+	// printCharacterSequence();
 	
 }
 
@@ -107,8 +107,9 @@ Stecy.sequence("update", [doNetworkStuff]);
 
 function trainLogicGate () {
 	
-	sil.network["input"].w = [Random.uniform() > 0.5, Random.uniform() > 0.5];
-	sil.network["desiredValues"].w = [sil.network["input"].w[0] + sil.network["input"].w[1] > 0];
+	Matrix.w[sil.network["input"].i + 0] = +(Random.uniform() > 0.5);
+	Matrix.w[sil.network["input"].i + 1] = +(Random.uniform() > 0.5);
+	Matrix.w[sil.network["desiredValues"].i] = +(Matrix.w[sil.network["input"].i + 0] + Matrix.w[sil.network["input"].i + 1] > 0);
 	sil.update();
 	sil.computeLoss("output", "desiredValues", Matrix.nothing, Silicitect.linearLoss);
 	sil.backpropagate();
@@ -117,18 +118,22 @@ function trainLogicGate () {
 
 function printLogicGate () {
 	
-	sil.network["input"].w = [0, 0];
+	Matrix.w[sil.network["input"].i + 0] = 0;
+	Matrix.w[sil.network["input"].i + 1] = 0;
 	sil.update();
-	Art.doWrite(0, "\n00 " + sil.network["output"].w[0].toFixed(2) + "\n");
-	sil.network["input"].w = [0, 1];
+	Art.doWrite(0, "\n00 " + Matrix.w[sil.network["output"].i].toFixed(2) + "\n");
+	Matrix.w[sil.network["input"].i + 0] = 0;
+	Matrix.w[sil.network["input"].i + 1] = 1;
 	sil.update();
-	Art.doWrite(0, "01 " + sil.network["output"].w[0].toFixed(2) + "\n");
-	sil.network["input"].w = [1, 0];
+	Art.doWrite(0, "01 " + Matrix.w[sil.network["output"].i].toFixed(2) + "\n");
+	Matrix.w[sil.network["input"].i + 0] = 1;
+	Matrix.w[sil.network["input"].i + 1] = 0;
 	sil.update();
-	Art.doWrite(0, "10 " + sil.network["output"].w[0].toFixed(2) + "\n");
-	sil.network["input"].w = [1, 1];
+	Art.doWrite(0, "10 " + Matrix.w[sil.network["output"].i].toFixed(2) + "\n");
+	Matrix.w[sil.network["input"].i + 0] = 1;
+	Matrix.w[sil.network["input"].i + 1] = 1;
 	sil.update();
-	Art.doWrite(0, "11 " + sil.network["output"].w[0].toFixed(2) + "\n");
+	Art.doWrite(0, "11 " + Matrix.w[sil.network["output"].i].toFixed(2) + "\n");
 	
 }
 
@@ -136,7 +141,7 @@ function trainAutoencoder () {
 	
 	sil.network["input"].w = Random.uniform() < 0.5 ? [1, 1, 0, 1, 1] : [0, 1, 1, 1, 0];
 	
-	for (var a = 0; a < sil.network["input"].w.length; a++) {
+	for (var a = 0; a < sil.network["input"].l; a++) {
 		
 		// sil.network["input"].w[a] = 1;
 		// sil.network["input"].w[a] = 0;
@@ -151,7 +156,7 @@ function trainAutoencoder () {
 
 function printAutoencoder () {
 	
-	for (var a = 0; a < sil.network["input"].w.length; a++) {
+	for (var a = 0; a < sil.network["input"].l; a++) {
 		
 		sil.network["input"].w[a] = +(Random.uniform() < 0.5);
 		
@@ -161,7 +166,7 @@ function printAutoencoder () {
 	
 	Art.doWrite(0, " ");
 	
-	for (var a = 0; a < sil.network["input"].w.length; a++) {
+	for (var a = 0; a < sil.network["input"].l; a++) {
 		
 		Art.doWrite(0, sil.network["input"].w[a].toFixed(0));
 		
@@ -169,7 +174,7 @@ function printAutoencoder () {
 	
 	Art.doWrite(0, " ");
 	
-	for (var a = 0; a < sil.network["output"].w.length; a++) {
+	for (var a = 0; a < sil.network["output"].l; a++) {
 		
 		Art.doWrite(0, sil.network["output"].w[a].toFixed(0));
 		
@@ -183,13 +188,13 @@ function drawAutoencoder () {
 	
 	Art.canvas.clearRect(0, 0, Art.width, Art.height);
 	
-	for (var a = 0; a < sil.network["input"].w.length; a++) {
+	for (var a = 0; a < sil.network["input"].l; a++) {
 		
 		sil.network["input"].w[a] = +(Random.uniform() < 0.5);
 		
 	}
 	
-	for (var a = 0; a < sil.network["input"].w.length; a++) {
+	for (var a = 0; a < sil.network["input"].l; a++) {
 		
 		var value = sil.network["input"].w[a];
 		
@@ -198,7 +203,7 @@ function drawAutoencoder () {
 		
 	}
 	
-	for (var a = 0; a < sil.network["output"].w.length; a++) {
+	for (var a = 0; a < sil.network["output"].l; a++) {
 		
 		var value = sil.network["output"].w[a];
 		

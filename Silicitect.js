@@ -64,14 +64,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			var ma = this.network[a];
 			
-			for (var b = 0; b < ma.w.length; b++) {
+			for (var b = 0; b < ma.l; b++) {
 				
-				ma.lw[b] = ma.lw[b] * this.decayRate + (1 - this.decayRate) * ma.dw[b] * ma.dw[b];
+				Matrix.lw[ma.i + b] = Matrix.lw[ma.i + b] * this.decayRate + (1 - this.decayRate) * Matrix.dw[ma.i + b] * Matrix.dw[ma.i + b];
 				
-				var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, ma.dw[b]));
+				var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, Matrix.dw[ma.i + b]));
 				
-				ma.w[b] += -this.learningRate * clippedValue / Math.sqrt(ma.lw[b] + 1e-8) - this.reguliser * ma.w[b];
-				ma.dw[b] = 0;
+				Matrix.w[ma.i + b] += -this.learningRate * clippedValue / Math.sqrt(Matrix.lw[ma.i + b] + 1e-8) - this.reguliser * Matrix.w[ma.i + b];
+				Matrix.dw[ma.i + b] = 0;
 				
 			}
 			
@@ -86,33 +86,33 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		var squashed = squashFunction(this.network[lossTarget]);
 		var sum = 0;
 		
-		for (var a = 0; a < squashed.w.length; a++) {
+		for (var a = 0; a < squashed.l; a++) {
 			
-			this.network[lossTarget].dw[a] = -1 * (this.network[desiredValues].w[a] - squashed.w[a]);
+			Matrix.dw[this.network[lossTarget].i + a] = -1 * (Matrix.w[this.network[desiredValues].i + a] - Matrix.w[squashed.i + a]);
 			
 		}
 		
 		if (lossFunction == Silicitect.logLoss) {
 			
-			for (var a = 0; a < squashed.w.length; a++) {
+			for (var a = 0; a < squashed.l; a++) {
 				
-				sum += -Math.log(1e-10 + Math.abs(1 - this.network[desiredValues].w[a] - squashed.w[a]));
+				sum += -Math.log(1e-10 + Math.abs(1 - Matrix.w[this.network[desiredValues].i + a] - Matrix.w[squashed.i + a]));
 				
 			}
 			
 		} else if (lossFunction == Silicitect.linearLoss) {
 			
-			for (var a = 0; a < squashed.w.length; a++) {
+			for (var a = 0; a < squashed.l; a++) {
 				
-				sum += Math.abs(this.network[desiredValues].w[a] - squashed.w[a]);
+				sum += Math.abs(Matrix.w[this.network[desiredValues].i + a] - Matrix.w[squashed.i + a]);
 				
 			}
 			
 		} else if (lossFunction == Silicitect.binaryLoss) {
 			
-			for (var a = 0; a < squashed.w.length; a++) {
+			for (var a = 0; a < squashed.l; a++) {
 				
-				sum += Math.round(Math.abs(this.network[desiredValues].w[a] - squashed.w[a]));
+				sum += Math.round(Math.abs(Matrix.w[this.network[desiredValues].i + a] - Matrix.w[squashed.i + a]));
 				
 			}
 			
@@ -170,21 +170,16 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		this.n = n;
 		this.d = d;
-		this.w = [];
-		this.dw = [];
-		this.lw = [];
+		this.l = n * d;
+		this.i = Matrix.c;
 		
-		for (var a = 0; a < n * d; a++) {
-			
-			this.w[a] = 0;
-			this.dw[a] = 0;
-			this.lw[a] = 0;
-			
-		}
+		Matrix.c += this.l;
 		
 	};
 	
-	// two buffer orders, to increase reuse
+	// free up old memory
+	// chain memory blocks for flexibility
+	// option to store memory blocks in cookies
 	Matrix.c = 0;
 	Matrix.w = new Float64Array(1e7);
 	Matrix.dw = new Float64Array(1e7);
@@ -192,7 +187,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.prototype.randomiseUniform = function () {
 		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = Random.uniform();
+		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = Random.uniform();
 		
 		return this;
 		
@@ -200,23 +195,23 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.prototype.randomiseNormalised = function (base, range) {
 		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = Random.uniform() / Math.sqrt(this.d);
+		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = Random.uniform() / Math.sqrt(this.d);
 		
 		return this;
 		
 	};
 	
-	Matrix.prototype.fill = function (va) {
+	Matrix.prototype.fill = function (valueA) {
 		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = va;
+		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = valueA;
 		
 		return this;
 		
 	};
 	
-	Matrix.prototype.fillExcept = function (va, i, vb) {
+	Matrix.prototype.fillExcept = function (valueA, index, valueB) {
 		
-		for (var a = 0; a < this.w.length; a++) this.w[a] = a == i ? vb : va;
+		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = a == index ? valueB : valueA;
 		
 		return this;
 		
@@ -228,9 +223,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var out = new Matrix(ma.n, ma.d);
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			ma.w[a] *= scale;
+			Matrix.w[ma.i + a] *= scale;
 			
 		}
 		
@@ -246,25 +241,25 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		if (temp) {
 			
-			for (var a = 0; a < ma.w.length; a++) ma.w[a] /= temp;
+			for (var a = 0; a < ma.l; a++) Matrix.w[ma.i + a] /= temp;
 			
 		}
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			if (ma.w[a] > max) max = ma.w[a];
-			
-		}
-		
-		for (var a = 0; a < ma.w.length; a++) {
-			
-			out.w[a] = Math.exp(ma.w[a] - max);
-			
-			sum += out.w[a];
+			if (Matrix.w[ma.i + a] > max) max = Matrix.w[ma.i + a];
 			
 		}
 		
-		for (var a = 0; a < ma.w.length; a++) out.w[a] /= sum;
+		for (var a = 0; a < ma.l; a++) {
+			
+			Matrix.w[out.i + a] = Math.exp(Matrix.w[ma.i + a] - max);
+			
+			sum += Matrix.w[out.i + a];
+			
+		}
+		
+		for (var a = 0; a < ma.l; a++) Matrix.w[out.i + a] /= sum;
 		
 		return out;
 		
@@ -274,9 +269,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var highest = 0;
 		
-		for (var a = 1; a < ma.w.length; a++) {
+		for (var a = 1; a < ma.l; a++) {
 			
-			if (ma.w[a] > ma.w[highest]) highest = a;
+			if (Matrix.w[ma.i + a] > ma.w[highest]) highest = a;
 			
 		}
 		
@@ -289,9 +284,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		var random = Math.random();
 		var sum = 0;
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			sum += ma.w[a];
+			sum += Matrix.w[ma.i + a];
 			
 			if (sum > random) return a;
 			
@@ -305,9 +300,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var out = new Matrix(ma.n, ma.d);
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			out.w[a] = 1 - ma.w[a];
+			Matrix.w[out.i + a] = 1 - Matrix.w[ma.i + a];
 			
 		}
 		
@@ -319,9 +314,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var out = new Matrix(ma.n, ma.d);
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			out.w[a] = ma.w[a];
+			Matrix.w[out.i + a] = Matrix.w[ma.i + a];
 			
 		}
 		
@@ -337,11 +332,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			for (var b = 0; b < mb.d; b++) {
 				
-				out.w[mb.d * a + b] = 0;
+				Matrix.w[out.i + mb.d * a + b] = 0;
 				
 				for (var c = 0; c < ma.d; c++) {
 					
-					out.w[mb.d * a + b] += ma.w[ma.d * a + c] * mb.w[mb.d * c + b];
+					Matrix.w[out.i + mb.d * a + b] += Matrix.w[ma.i + ma.d * a + c] * Matrix.w[mb.i + mb.d * c + b];
 					
 				}
 				
@@ -363,8 +358,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 				
 				for (var c = 0; c < ma.d; c++) {
 					
-					ma.dw[ma.d * a + c] += mb.w[mb.d * c + b] * out.dw[mb.d * a + b];
-					mb.dw[mb.d * c + b] += ma.w[ma.d * a + c] * out.dw[mb.d * a + b];
+					Matrix.dw[ma.i + ma.d * a + c] += Matrix.w[mb.i + mb.d * c + b] * Matrix.dw[out.i + mb.d * a + b];
+					Matrix.dw[mb.i + mb.d * c + b] += Matrix.w[ma.i + ma.d * a + c] * Matrix.dw[out.i + mb.d * a + b];
 					
 				}
 				
@@ -378,9 +373,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var out = new Matrix(ma.n, ma.d);
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			out.w[a] = ma.w[a] * mb.w[a];
+			Matrix.w[out.i + a] = Matrix.w[ma.i + a] * Matrix.w[mb.i + a];
 			
 		}
 		
@@ -392,10 +387,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.elementMultiplyBackward = function (ma, mb, out) {
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			ma.dw[a] += mb.w[a] * out.dw[a];
-			mb.dw[a] += ma.w[a] * out.dw[a];
+			Matrix.dw[ma.i + a] += Matrix.w[mb.i + a] * Matrix.dw[out.i + a];
+			Matrix.dw[mb.i + a] += Matrix.w[ma.i + a] * Matrix.dw[out.i + a];
 			
 		}
 		
@@ -405,9 +400,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var out = new Matrix(ma.n, ma.d);
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			out.w[a] = ma.w[a] + mb.w[a];
+			Matrix.w[out.i + a] = Matrix.w[ma.i + a] + Matrix.w[mb.i + a];
 			
 		}
 		
@@ -419,10 +414,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.addBackward = function (ma, mb, out) {
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			ma.dw[a] += out.dw[a];
-			mb.dw[a] += out.dw[a];
+			Matrix.dw[ma.i + a] += Matrix.dw[out.i + a];
+			Matrix.dw[mb.i + a] += Matrix.dw[out.i + a];
 			
 		}
 		
@@ -432,9 +427,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var out = new Matrix(ma.n, ma.d);
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			out.w[a] = 1 / (1 + Math.exp(-ma.w[a]));
+			Matrix.w[out.i + a] = 1 / (1 + Math.exp(-Matrix.w[ma.i + a]));
 			
 		}
 		
@@ -446,9 +441,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.sigmoidBackward = function (ma, out) {
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			ma.dw[a] += out.w[a] * (1 - out.w[a]) * out.dw[a];
+			Matrix.dw[ma.i + a] += Matrix.w[out.i + a] * (1 - Matrix.w[out.i + a]) * Matrix.dw[out.i + a];
 			
 		}
 		
@@ -458,9 +453,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var out = new Matrix(ma.n, ma.d);
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			out.w[a] = Math.max(0, ma.w[a]);
+			Matrix.w[out.i + a] = Math.max(0, Matrix.w[ma.i + a]);
 			
 		}
 		
@@ -472,9 +467,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.rectifiedLinearBackward = function (ma, out) {
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			ma.dw[a] += ma.w[a] > 0 ? out.dw[a] : 0;
+			Matrix.dw[ma.i + a] += Matrix.w[ma.i + a] > 0 ? Matrix.dw[out.i + a] : 0;
 			
 		}
 		
@@ -484,9 +479,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		var out = new Matrix(ma.n, ma.d);
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			out.w[a] = Math.tanh(ma.w[a]);
+			Matrix.w[out.i + a] = Math.tanh(Matrix.w[ma.i + a]);
 			
 		}
 		
@@ -498,9 +493,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Matrix.hyperbolicTangentBackward = function (ma, out) {
 		
-		for (var a = 0; a < ma.w.length; a++) {
+		for (var a = 0; a < ma.l; a++) {
 			
-			ma.dw[a] += (1 - out.w[a] * out.w[a]) * out.dw[a];
+			Matrix.dw[ma.i + a] += (1 - Matrix.w[out.i + a] * Matrix.w[out.i + a]) * Matrix.dw[out.i + a];
 			
 		}
 		
@@ -512,7 +507,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		for (var a = 0; a < ma.d; a++) {
 			
-			out.w[a] = ma.w[ma.d * row + a];
+			Matrix.w[out.i + a] = Matrix.w[ma.i + ma.d * row + a];
 			
 		}
 		
@@ -526,7 +521,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		for (var a = 0; a < ma.d; a++) {
 			
-			ma.dw[ma.d * row + a] += out.dw[a];
+			Matrix.dw[ma.i + ma.d * row + a] += Matrix.dw[out.i + a];
 			
 		}
 		
