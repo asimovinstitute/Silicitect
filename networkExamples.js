@@ -60,7 +60,7 @@ function init (e) {
 	// layerSizes = [2, 5, 1];
 	// layerSizes = [5, 4, 3, 4, 5];
 	
-	sil = new Silicitect(examples.initAE, examples.updateAE);
+	sil = new Silicitect(examples.initLSTM, examples.updateLSTM);
 	
 	sil.reguliser = 1e-8;
 	sil.learningRate = 0.05;
@@ -82,9 +82,9 @@ function doNetworkStuff () {
 	
 	for (var b = 0; b < iterationsPerFrame; b++) {
 		
-		trainAutoencoder();
+		// trainAutoencoder();
 		// trainLogicGate();
-		// trainCharacterSequence();
+		trainCharacterSequence();
 		
 	}
 	
@@ -97,9 +97,9 @@ function doNetworkStuff () {
 	Art.doWrite(0, " avg " + (averageBatchTime / (totalIterations / iterationsPerFrame)).toFixed(0));
 	
 	// drawAutoencoder();
-	printAutoencoder();
+	// printAutoencoder();
 	// printLogicGate();
-	// printCharacterSequence();
+	printCharacterSequence();
 	
 }
 
