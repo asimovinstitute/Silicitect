@@ -116,6 +116,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		}
 		
 		this.backprop = [];
+		this.cleanUp();
+		
+	};
+	
+	Silicitect.prototype.cleanUp = function () {
 		
 		for (var a = Matrix.c; a > this.networkMemory - 1; a--) {
 			
