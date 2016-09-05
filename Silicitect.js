@@ -21,7 +21,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		this.reguliser = 1e-8;
 		this.learningRate = 0.001;
 		this.clipValue = 5;
-		this.decayRate = 0.95;
+		this.decay = 0.95;
+		this.decayLinear = 0.98;
+		this.epsilon = 1e-8;
+		this.optimiser = Silicitect.rmspropOptimiser;
 		
 		this.batchTime = 0;
 		this.totalLoss = 0;
@@ -34,6 +37,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		this.initialise();
 		
 	};
+	
+	Silicitect.logLoss = 0;
+	Silicitect.linearLoss = 1;
+	Silicitect.binaryLoss = 2;
+	
+	Silicitect.rmspropOptimiser = 0;
+	Silicitect.adamOptimiser = 1;
 	
 	Silicitect.prototype.startLearningSession = function () {
 		
@@ -60,18 +70,45 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		for (var a in this.network) {
+		var invDecay = 1 - this.decay;
+		var invDecayLinear = 1 - this.decayLinear;
+		
+		if (this.optimiser == Silicitect.rmspropOptimiser) {
 			
-			var ma = this.network[a];
+			for (var a in this.network) {
+				
+				var ma = this.network[a];
+				
+				for (var b = 0; b < ma.l; b++) {
+					
+					Matrix.vw[ma.i + b] = Matrix.vw[ma.i + b] * this.decay + invDecay * Matrix.dw[ma.i + b] * Matrix.dw[ma.i + b];
+					
+					var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, Matrix.dw[ma.i + b]));
+					
+					Matrix.w[ma.i + b] -= (this.learningRate * clippedValue) / Math.sqrt(Matrix.vw[ma.i + b] + this.epsilon) + this.reguliser * Matrix.dw[ma.i + b];
+					Matrix.dw[ma.i + b] = 0;
+					
+				}
+				
+			}
 			
-			for (var b = 0; b < ma.l; b++) {
+		} else if (this.optimiser == Silicitect.adamOptimiser) {
+			
+			for (var a in this.network) {
 				
-				Matrix.lw[ma.i + b] = Matrix.lw[ma.i + b] * this.decayRate + (1 - this.decayRate) * Matrix.dw[ma.i + b] * Matrix.dw[ma.i + b];
+				var ma = this.network[a];
 				
-				var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, Matrix.dw[ma.i + b]));
-				
-				Matrix.w[ma.i + b] += -this.learningRate * clippedValue / Math.sqrt(Matrix.lw[ma.i + b] + 1e-8) - this.reguliser * Matrix.w[ma.i + b];
-				Matrix.dw[ma.i + b] = 0;
+				for (var b = 0; b < ma.l; b++) {
+					
+					var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, Matrix.dw[ma.i + b]));
+					
+					Matrix.mw[ma.i + b] = Matrix.mw[ma.i + b] * this.decayLinear + invDecayLinear * clippedValue;
+					Matrix.vw[ma.i + b] = Matrix.vw[ma.i + b] * this.decay + invDecay * Matrix.dw[ma.i + b] * Matrix.dw[ma.i + b];
+					
+					Matrix.w[ma.i + b] -= (this.learningRate * (Matrix.mw[ma.i + b] / invDecayLinear)) / (Math.sqrt((Matrix.vw[ma.i + b] / invDecay) + this.epsilon) + this.epsilon) + this.reguliser * Matrix.dw[ma.i + b];
+					Matrix.dw[ma.i + b] = 0;
+					
+				}
 				
 			}
 			
@@ -123,10 +160,6 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		return sum;
 		
 	};
-	
-	Silicitect.logLoss = 0;
-	Silicitect.linearLoss = 1;
-	Silicitect.binaryLoss = 2;
 	
 	Random = {rgn:0, seed:0};
 	
@@ -183,7 +216,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	Matrix.c = 0;
 	Matrix.w = new Float64Array(1e7);
 	Matrix.dw = new Float64Array(1e7);
-	Matrix.lw = new Float64Array(1e7);
+	Matrix.vw = new Float64Array(1e7);
+	Matrix.mw = new Float64Array(1e7);
 	
 	Matrix.prototype.randomiseUniform = function () {
 		

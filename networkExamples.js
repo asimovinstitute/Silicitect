@@ -65,7 +65,9 @@ function init (e) {
 	sil.reguliser = 1e-8;
 	sil.learningRate = 0.05;
 	sil.clipValue = 5;
-	sil.decayRate = 0.95;
+	sil.decay = 0.95;
+	sil.decayLinear = 0.95;
+	sil.optimiser = Silicitect.rmspropOptimiser;
 	
 	Matrix.silicitect = sil;
 	
