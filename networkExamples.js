@@ -23,7 +23,7 @@ var samplePrime = "0";
 // generic parameters
 var running = false;
 var iterationsPerFrame = 100;
-var maxIterations = 3e3;
+var maxIterations = 2e3;
 var averageBatchTime = 0;
 var totalIterations = 0;
 var seed = 3;
@@ -56,18 +56,18 @@ Art.ready = function () {
 function init (e) {
 	
 	textParser = new TextParser(e.responseText, "");
-	// layerSizes = [textParser.chars.length, 30, 30, textParser.chars.length];
+	layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
 	// layerSizes = [2, 2, 1];
-	layerSizes = [5, 4, 3, 4, 5];
+	// layerSizes = [5, 4, 3, 4, 5];
 	
-	sil = new Silicitect(examples.initAE, examples.updateAE);
+	sil = new Silicitect(examples.initLSTM, examples.updateLSTM);
 	
-	sil.reguliser = 1e-8;
+	sil.reguliser = 1e-5;
 	sil.learningRate = 0.1;
 	sil.clipValue = 5;
-	sil.decay = 0.95;
-	sil.decayLinear = 0;
-	sil.optimiser = Silicitect.rmspropOptimiser;
+	sil.decay = 0.9;
+	sil.decayLinear = 0.9;
+	sil.optimiser = Silicitect.adamOptimiser;
 	
 	Matrix.silicitect = sil;
 	
@@ -84,9 +84,9 @@ function doNetworkStuff () {
 	
 	for (var b = 0; b < iterationsPerFrame; b++) {
 		
-		trainAutoencoder();
+		// trainAutoencoder();
 		// trainLogicGate();
-		// trainCharacterSequence();
+		trainCharacterSequence();
 		
 	}
 	
@@ -99,9 +99,9 @@ function doNetworkStuff () {
 	Art.doWrite(0, " avg " + (averageBatchTime / (totalIterations / iterationsPerFrame)).toFixed(0));
 	
 	// drawAutoencoder();
-	printAutoencoder();
+	// printAutoencoder();
 	// printLogicGate();
-	// printCharacterSequence();
+	printCharacterSequence();
 	
 }
 
