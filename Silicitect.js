@@ -35,6 +35,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		this.update = updater;
 		
 		this.initialise();
+		this.networkMemory = Matrix.c;
 		
 	};
 	
@@ -67,6 +68,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			if (this.backprop[a].length == 1) this.backprop[a - 1](this.backprop[a][0]);
 			if (this.backprop[a].length == 2) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1]);
 			if (this.backprop[a].length == 3) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1], this.backprop[a][2]);
+			
+			for (var b = 0; b < this.backprop[a].length; b++) {
+				
+				mem[this.backprop[a][b].i]++;
+				
+			}
 			
 		}
 		
@@ -115,6 +122,15 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		}
 		
 		this.backprop = [];
+		
+		for (var a = Matrix.c; a > this.networkMemory - 1; a--) {
+			
+			Matrix.w[a] = 0;
+			Matrix.dw[a] = 0;
+			
+		}
+		
+		Matrix.c = this.networkMemory;
 		
 	};
 	
@@ -196,28 +212,26 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	TextParser.predefinedCharacterSet = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t" + 
-										"1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-	
+	TextParser.predefinedCharacterSet = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t";
+	TextParser.predefinedCharacterSet += "1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+	mem = {};
 	Matrix = function (n, d) {
 		
 		this.n = n;
 		this.d = d;
 		this.l = n * d;
 		this.i = Matrix.c;
-		
+		mem[Matrix.c] = 0;
 		Matrix.c += this.l;
 		
 	};
 	
-	// free up old memory
-	// chain memory blocks for flexibility
-	// option to store memory blocks in cookies
 	Matrix.c = 0;
 	Matrix.w = new Float64Array(1e7);
 	Matrix.dw = new Float64Array(1e7);
 	Matrix.vw = new Float64Array(1e7);
 	Matrix.mw = new Float64Array(1e7);
+	
 	
 	Matrix.prototype.randomiseUniform = function () {
 		
