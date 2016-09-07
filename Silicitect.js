@@ -106,7 +106,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 					Matrix.mw[ma.i + b] = Matrix.mw[ma.i + b] * this.decayLinear + invDecayLinear * clippedValue;
 					Matrix.vw[ma.i + b] = Matrix.vw[ma.i + b] * this.decay + invDecay * Matrix.dw[ma.i + b] * Matrix.dw[ma.i + b];
 					
-					Matrix.w[ma.i + b] -= (this.learningRate * (Matrix.mw[ma.i + b] / invDecayLinear)) / (Math.sqrt((Matrix.vw[ma.i + b] / invDecay) + this.epsilon) + this.epsilon) + this.reguliser * Matrix.dw[ma.i + b];
+					Matrix.w[ma.i + b] -= (this.learningRate * (Matrix.mw[ma.i + b] / invDecayLinear)) /
+											(Math.sqrt((Matrix.vw[ma.i + b] / invDecay) + this.epsilon) + this.epsilon) +
+											this.reguliser * Matrix.dw[ma.i + b];
 					Matrix.dw[ma.i + b] = 0;
 					
 				}
@@ -116,11 +118,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		}
 		
 		this.backprop = [];
-		this.cleanUp();
+		this.flush();
 		
 	};
 	
-	Silicitect.prototype.cleanUp = function () {
+	Silicitect.prototype.flush = function () {
 		
 		for (var a = Matrix.c; a > this.networkMemory - 1; a--) {
 			

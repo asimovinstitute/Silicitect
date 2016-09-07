@@ -62,12 +62,12 @@ function init (e) {
 	
 	sil = new Silicitect(examples.initLSTM, examples.updateLSTM);
 	
-	sil.reguliser = 1e-5;
-	sil.learningRate = 0.1;
+	sil.reguliser = 1e-8;
+	sil.learningRate = 0.05;
 	sil.clipValue = 5;
-	sil.decay = 0.9;
+	sil.decay = 0.99;
 	sil.decayLinear = 0.9;
-	sil.optimiser = Silicitect.adamOptimiser;
+	sil.optimiser = Silicitect.rmspropOptimiser;
 	
 	Matrix.silicitect = sil;
 	
