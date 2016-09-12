@@ -398,21 +398,21 @@ examples.initLSTM = function () {
 		var prevSize = layerSizes[a - 1];
 		var size = layerSizes[a];
 		
-		network["input" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		network["inputHidden" + a] = new Matrix(size, size).randomiseNormalised();
+		network["input" + a] = new Matrix(size, prevSize).randomiseGaussian(0, 2);
+		network["inputHidden" + a] = new Matrix(size, size).randomiseGaussian(0, 2);
 		network["inputBias" + a] = new Matrix(size, 1).fill(1);
 		
-		network["forget" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		network["forgetHidden" + a] = new Matrix(size, size).randomiseNormalised();
+		network["forget" + a] = new Matrix(size, prevSize).randomiseGaussian(0, 2);
+		network["forgetHidden" + a] = new Matrix(size, size).randomiseGaussian(0, 2);
 		network["forgetBias" + a] = new Matrix(size, 1).fill(1);
 		
-		network["output" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		network["outputHidden" + a] = new Matrix(size, size).randomiseNormalised();
+		network["output" + a] = new Matrix(size, prevSize).randomiseGaussian(0, 2);
+		network["outputHidden" + a] = new Matrix(size, size).randomiseGaussian(0, 2);
 		network["outputBias" + a] = new Matrix(size, 1).fill(1);
 		network["outputLast" + a] = new Matrix(size, 1);
 		
-		network["cell" + a] = new Matrix(size, prevSize).randomiseNormalised();
-		network["cellHidden" + a] = new Matrix(size, size).randomiseNormalised();
+		network["cell" + a] = new Matrix(size, prevSize).randomiseGaussian(0, 2);
+		network["cellHidden" + a] = new Matrix(size, size).randomiseGaussian(0, 2);
 		network["cellBias" + a] = new Matrix(size, 1).fill(1);
 		network["cellLast" + a] = new Matrix(size, 1);
 		
@@ -420,7 +420,7 @@ examples.initLSTM = function () {
 	
 	var lastLayerSize = layerSizes[layerSizes.length - 1];
 	
-	network["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseNormalised();
+	network["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseGaussian(0, 2);
 	network["decoderBias"] = new Matrix(lastLayerSize, 1).fill(1);
 	
 	network["output"] = new Matrix(lastLayerSize, 1);

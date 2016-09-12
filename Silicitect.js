@@ -178,13 +178,44 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Random = {rgn:0, seed:0};
+	Random = {lossless:0, seed:0, nextGaussian:-1};
 	
 	Random.uniform = function () {
 		
-		Random.rgn = (4321421413 * Random.rgn + 432194612 + Random.seed) % 43214241 * (79143569 + Random.seed);
+		Random.lossless = (4321421413 * Random.lossless + 432194612 + Random.seed) % 43214241 * (79143569 + Random.seed);
 		
-		return 1e-10 * (Random.rgn % 1e10);
+		return 1e-10 * (Random.lossless % 1e10);
+		
+	};
+	
+	Random.gaussian = function (mean, standardDeviation) {
+		
+		if (Random.nextGaussian != -1) {
+			
+			var output = Random.nextGaussian;
+			
+			Random.nextGaussian = -1;
+			
+			return output;
+			
+		}
+		
+		var xa = 0;
+		var xb = 0;
+		var w = 0;
+		
+		do {
+			
+			xa = 2 * Random.uniform() - 1;
+			xb = 2 * Random.uniform() - 1;
+			w = xa * xa + xb * xb;
+			
+		} while (w > 1);
+		
+		w = Math.sqrt((-2 * Math.log(w)) / w);
+		Random.nextGaussian = mean + xb * w * standardDeviation;
+		
+		return mean + xa * w * standardDeviation;
 		
 	};
 	
@@ -233,7 +264,6 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	Matrix.vw = new Float64Array(1e7);
 	Matrix.mw = new Float64Array(1e7);
 	
-	
 	Matrix.prototype.randomiseUniform = function () {
 		
 		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = Random.uniform();
@@ -242,9 +272,17 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Matrix.prototype.randomiseNormalised = function (base, range) {
+	Matrix.prototype.randomiseNormalised = function () {
 		
 		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = Random.uniform() / Math.sqrt(this.d);
+		
+		return this;
+		
+	};
+	
+	Matrix.prototype.randomiseGaussian = function (median, standardDeviation) {
+		
+		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = Random.gaussian(median, standardDeviation);
 		
 		return this;
 		
