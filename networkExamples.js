@@ -49,18 +49,18 @@ Art.ready = function () {
 	
 	Stecy.loadFile(filePath, init);
 	
-	Art.doStyle(0, "whiteSpace", "pre-wrap", "font", "20px monospace", "tabSize", "6", "background", "#333", "color", "#ccc");
+	Art.doStyle(0, "whiteSpace", "pre-wrap", "font", "20px monospace", "tabSize", "4", "background", "#333", "color", "#ccc");
 	
 };
 
 function init (e) {
 	
 	textParser = new TextParser(e.responseText, "");
-	layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
+	// layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
 	// layerSizes = [2, 2, 1];
-	// layerSizes = [5, 4, 3, 4, 5];
+	layerSizes = [5, 4, 3, 4, 5];
 	
-	sil = new Silicitect(examples.initLSTM, examples.updateLSTM);
+	sil = new Silicitect(examples.initVAE, examples.updateVAE);
 	
 	sil.reguliser = 1e-8;
 	sil.learningRate = 0.05;
@@ -86,7 +86,8 @@ function doNetworkStuff () {
 		
 		// trainAutoencoder();
 		// trainLogicGate();
-		trainCharacterSequence();
+		// trainCharacterSequence();
+		trainVariationalAutoencoder();
 		
 	}
 	
@@ -101,7 +102,8 @@ function doNetworkStuff () {
 	// drawAutoencoder();
 	// printAutoencoder();
 	// printLogicGate();
-	printCharacterSequence();
+	// printCharacterSequence();
+	printVariationalAutoencoder();
 	
 }
 
@@ -112,6 +114,7 @@ function trainLogicGate () {
 	Matrix.w[sil.network["input"].i + 0] = +(Random.uniform() > 0.5);
 	Matrix.w[sil.network["input"].i + 1] = +(Random.uniform() > 0.5);
 	Matrix.w[sil.network["desiredValues"].i] = +(Matrix.w[sil.network["input"].i + 0] + Matrix.w[sil.network["input"].i + 1] > 0);
+	
 	sil.update();
 	sil.computeLoss("output", "desiredValues", Matrix.nothing, Silicitect.linearLoss);
 	sil.backpropagate();
@@ -136,6 +139,42 @@ function printLogicGate () {
 	Matrix.w[sil.network["input"].i + 1] = 1;
 	sil.update();
 	Art.doWrite(0, "11 " + Matrix.w[sil.network["output"].i].toFixed(2) + "\n");
+	
+}
+
+function trainVariationalAutoencoder () {
+	
+	
+	
+}
+
+function printVariationalAutoencoder () {
+	
+	for (var a = 0; a < sil.network["input"].l; a++) {
+		
+		Matrix.w[sil.network["input"].i + a] = +(Random.uniform() < 0.5);
+		
+	}
+	
+	sil.update();
+	
+	Art.doWrite(0, " ");
+	
+	for (var a = 0; a < sil.network["input"].l; a++) {
+		
+		Art.doWrite(0, Matrix.w[sil.network["input"].i + a].toFixed(0));
+		
+	}
+	
+	Art.doWrite(0, " ");
+	
+	for (var a = 0; a < sil.network["output"].l; a++) {
+		
+		Art.doWrite(0, Matrix.w[sil.network["output"].i + a].toFixed(0));
+		
+	}
+	
+	Art.doWrite(0, "\n");
 	
 }
 
@@ -322,7 +361,7 @@ examples.initFF = function () {
 	network["output"] = new Matrix(lastLayerSize, 1);
 	network["desiredValues"] = new Matrix(lastLayerSize, 1);
 	
-}
+};
 
 examples.updateFF = function () {
 	
@@ -340,7 +379,54 @@ examples.updateFF = function () {
 	
 	network["output"] = Matrix.sigmoid(Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]));
 	
-}
+};
+
+examples.initVAE = function () {
+	
+	var network = this.network;
+	
+	network["input"] = new Matrix(layerSizes[0], 1);
+	
+	for (var a = 1; a < layerSizes.length - 1; a++) {
+		
+		var prevSize = layerSizes[a - 1];
+		var size = layerSizes[a];
+		
+		if (a == (layerSizes.length - 1) / 2) {
+			
+			network["mean"] = new Matrix(size, prevSize).randomiseNormalised();
+			network["meanBias"] = new Matrix(size, 1).fill(1);
+			
+			network["standardDeviation"] = new Matrix(size, prevSize).randomiseNormalised();
+			network["standardDeviationBias"] = new Matrix(size, 1).fill(1);
+			
+		} else {
+			
+			network["hidden" + a] = new Matrix(size, prevSize).randomiseNormalised();
+			network["hiddenBias" + a] = new Matrix(size, 1).fill(1);
+			
+			network["outputLast" + a] = new Matrix(size, 1);
+			
+		}
+		
+	}
+	
+	var lastLayerSize = layerSizes[layerSizes.length - 1];
+	
+	network["decoder"] = new Matrix(lastLayerSize, layerSizes[layerSizes.length - 2]).randomiseNormalised();
+	network["decoderBias"] = new Matrix(lastLayerSize, 1).fill(1);
+	
+	network["output"] = new Matrix(lastLayerSize, 1);
+	
+};
+
+examples.updateVAE = function () {
+	
+	var network = this.network;
+	
+	
+	
+};
 
 examples.initAE = function () {
 	
@@ -367,7 +453,7 @@ examples.initAE = function () {
 	
 	network["output"] = new Matrix(lastLayerSize, 1);
 	
-}
+};
 
 examples.updateAE = function () {
 	
@@ -385,7 +471,7 @@ examples.updateAE = function () {
 	
 	network["output"] = Matrix.sigmoid(Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]));
 	
-}
+};
 
 examples.initLSTM = function () {
 	
@@ -426,7 +512,7 @@ examples.initLSTM = function () {
 	network["output"] = new Matrix(lastLayerSize, 1);
 	network["desiredValues"] = new Matrix(lastLayerSize, 1);
 	
-}
+};
 
 examples.updateLSTM = function () {
 	
@@ -462,7 +548,7 @@ examples.updateLSTM = function () {
 	
 	network["output"] = Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]);
 	
-}
+};
 
 examples.initRNN = function () {
 	
@@ -491,7 +577,7 @@ examples.initRNN = function () {
 	network["output"] = new Matrix(lastLayerSize, 1);
 	network["desiredValues"] = new Matrix(lastLayerSize, 1);
 	
-}
+};
 
 examples.updateRNN = function () {
 	
@@ -511,7 +597,8 @@ examples.updateRNN = function () {
 	
 	network["output"] = Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]);
 	
-}
+	
+};
 
 examples.initGRU = function () {
 	
@@ -545,7 +632,7 @@ examples.initGRU = function () {
 	network["output"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	network["desiredValues"] = new Matrix(layerSizes[layerSizes.length - 1], 1);
 	
-}
+};
 
 examples.updateGRU = function () {
 	
@@ -573,4 +660,4 @@ examples.updateGRU = function () {
 	
 	network["output"] = Matrix.add(Matrix.multiply(network["decoder"], network["outputLast" + (layerSizes.length - 2)]), network["decoderBias"]);
 	
-}
+};

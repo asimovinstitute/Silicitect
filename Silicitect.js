@@ -16,6 +16,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 
 (function () {
 	
+	var enumator = 0;
+	
 	Silicitect = function (initialiser, updater) {
 		
 		this.reguliser = 1e-8;
@@ -39,12 +41,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Silicitect.logLoss = 0;
-	Silicitect.linearLoss = 1;
-	Silicitect.binaryLoss = 2;
+	Silicitect.logLoss = enumator++;
+	Silicitect.linearLoss = enumator++;
+	Silicitect.binaryLoss = enumator++;
 	
-	Silicitect.rmspropOptimiser = 0;
-	Silicitect.adamOptimiser = 1;
+	Silicitect.rmspropOptimiser = enumator++;
+	Silicitect.adamOptimiser = enumator++;
 	
 	Silicitect.prototype.startLearningSession = function () {
 		
@@ -58,6 +60,20 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		this.recordBackprop = false;
 		this.batchTime = new Date() - this.batchTime;
+		
+	};
+	
+	Silicitect.prototype.viewNetwork = function () {
+		
+		var result = "";
+		
+		for (var a in this.network) {
+			
+			result += a + ", " + this.network[a].n + " x " + this.network[a].d + "\n";
+			
+		}
+		
+		return result;
 		
 	};
 	
@@ -587,31 +603,5 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		}
 		
 	};
-	
-	Matrix.rowPluck = function (ma, row) {
-		
-		var out = new Matrix(ma.d, 1);
-		
-		for (var a = 0; a < ma.d; a++) {
-			
-			Matrix.w[out.i + a] = Matrix.w[ma.i + ma.d * row + a];
-			
-		}
-		
-		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.rowPluckBackward, [ma, out, row]);
-		
-		return out;
-		
-	};
-	
-	Matrix.rowPluckBackward = function (ma, out, row) {
-		
-		for (var a = 0; a < ma.d; a++) {
-			
-			Matrix.dw[ma.i + ma.d * row + a] += Matrix.dw[out.i + a];
-			
-		}
-		
-	}
 	
 })();
