@@ -140,14 +140,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Silicitect.prototype.flush = function () {
 		
-		for (var a = Matrix.c; a > this.networkMemory - 1; a--) {
+		for (var a = Matrix.c; a > this.networkMemory + 2; a--) {
 			
 			Matrix.w[a] = 0;
 			Matrix.dw[a] = 0;
 			
 		}
 		
-		Matrix.c = this.networkMemory;
+		Matrix.c = this.networkMemory + 1;
 		
 	};
 	

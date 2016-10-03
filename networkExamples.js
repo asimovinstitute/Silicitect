@@ -56,11 +56,11 @@ Art.ready = function () {
 function init (e) {
 	
 	textParser = new TextParser(e.responseText, "");
-	// layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
+	layerSizes = [textParser.chars.length, 10, 10, textParser.chars.length];
 	// layerSizes = [2, 2, 1];
-	layerSizes = [5, 4, 3, 4, 5];
+	// layerSizes = [5, 4, 3, 4, 5];
 	
-	sil = new Silicitect(examples.initVAE, examples.updateVAE);
+	sil = new Silicitect(examples.initLSTM, examples.updateLSTM);
 	
 	sil.reguliser = 1e-8;
 	sil.learningRate = 0.05;
@@ -86,8 +86,8 @@ function doNetworkStuff () {
 		
 		// trainAutoencoder();
 		// trainLogicGate();
-		// trainCharacterSequence();
-		trainVariationalAutoencoder();
+		trainCharacterSequence();
+		// trainVariationalAutoencoder();
 		
 	}
 	
@@ -102,8 +102,8 @@ function doNetworkStuff () {
 	// drawAutoencoder();
 	// printAutoencoder();
 	// printLogicGate();
-	// printCharacterSequence();
-	printVariationalAutoencoder();
+	printCharacterSequence();
+	// printVariationalAutoencoder();
 	
 }
 
