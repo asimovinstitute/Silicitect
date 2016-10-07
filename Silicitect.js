@@ -1,4 +1,4 @@
-/*Silicitect, model neural network architectures in JavaScript for silicon hardware.
+/*Silicitect, model neural net architectures in JavaScript for silicon hardware.
 Copyright (C) 2016 Fjodor van Veen
 
 This program is free software: you can redistribute it and/or modify
@@ -31,13 +31,47 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		this.batchTime = 0;
 		this.totalLoss = 0;
 		this.backprop = [];
-		this.network = {};
+		this.net = {};
 		this.recordBackprop = false;
 		this.initialise = initialiser;
 		this.update = updater;
 		
+		this.text = {};
+		this.text.raw = "";
+		this.text.charToIndex = {};
+		this.text.characterSet = "";
+		
+		this.image = {};
+		
+		this.sound = {};
+		
+		this.random = {};
+		this.random.lossless = 0;
+		this.random.nextGaussian = 0;
+		this.random.seed = 0;
+		
+		this.memCount = 0;
+		this.weights = new Float64Array(1e7);
+		this.dWeights = new Float64Array(1e7);
+		this.vWeights = new Float64Array(1e7);
+		this.mWeights = new Float64Array(1e7);
+		
+		
+	};
+	
+	Silicitect.prototype.init = function (memory) {
+		
+		memory = memory ? memory : 1e7;
+		
+		this.memCount = 0;
+		this.weights = new Float64Array(memory);
+		this.dWeights = new Float64Array(memory);
+		this.vWeights = new Float64Array(memory);
+		this.mWeights = new Float64Array(memory);
+		
 		this.initialise();
-		this.networkMemory = Matrix.c;
+		
+		this.netMemory = this.memCount;
 		
 	};
 	
@@ -47,6 +81,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Silicitect.rmspropOptimiser = enumator++;
 	Silicitect.adamOptimiser = enumator++;
+	
+	Silicitect.predefinedCharacterSet = enumator++;
 	
 	Silicitect.prototype.startLearningSession = function () {
 		
@@ -63,13 +99,25 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Silicitect.prototype.viewNetwork = function () {
+	Silicitect.prototype.viewNet = function (displayWeights) {
 		
 		var result = "";
 		
-		for (var a in this.network) {
+		for (var a in this.net) {
 			
-			result += a + ", " + this.network[a].n + " x " + this.network[a].d + "\n";
+			result += a + ", " + this.net[a].n + " x " + this.net[a].d + "\n";
+			
+			if (displayWeights) {
+				
+				for (var b = 0; b < this.net[a].l; b++) {
+					
+					if (this.weights[this.net[a].i + b] >= 0) result += " ";
+					
+					result += this.weights[this.net[a].i + b].toFixed(3) + (b % this.net[a].d == this.net[a].d - 1 ? "\n" : "   ");
+					
+				}
+				
+			}
 			
 		}
 		
@@ -81,9 +129,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		for (var a = this.backprop.length - 1; a > -1; a -= 2) {
 			
-			if (this.backprop[a].length == 1) this.backprop[a - 1](this.backprop[a][0]);
-			if (this.backprop[a].length == 2) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1]);
-			if (this.backprop[a].length == 3) this.backprop[a - 1](this.backprop[a][0], this.backprop[a][1], this.backprop[a][2]);
+			if (this.backprop[a].length == 1) this[this.backprop[a - 1]](this.backprop[a][0]);
+			if (this.backprop[a].length == 2) this[this.backprop[a - 1]](this.backprop[a][0], this.backprop[a][1]);
+			if (this.backprop[a].length == 3) this[this.backprop[a - 1]](this.backprop[a][0], this.backprop[a][1], this.backprop[a][2]);
 			
 		}
 		
@@ -92,18 +140,18 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		if (this.optimiser == Silicitect.rmspropOptimiser) {
 			
-			for (var a in this.network) {
+			for (var a in this.net) {
 				
-				var ma = this.network[a];
+				var ma = this.net[a];
 				
 				for (var b = 0; b < ma.l; b++) {
 					
-					Matrix.vw[ma.i + b] = Matrix.vw[ma.i + b] * this.decay + invDecay * Matrix.dw[ma.i + b] * Matrix.dw[ma.i + b];
+					this.vWeights[ma.i + b] = this.vWeights[ma.i + b] * this.decay + invDecay * this.dWeights[ma.i + b] * this.dWeights[ma.i + b];
 					
-					var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, Matrix.dw[ma.i + b]));
+					var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, this.dWeights[ma.i + b]));
 					
-					Matrix.w[ma.i + b] -= (this.learningRate * clippedValue) / Math.sqrt(Matrix.vw[ma.i + b] + this.epsilon) + this.reguliser * Matrix.dw[ma.i + b];
-					Matrix.dw[ma.i + b] = 0;
+					this.weights[ma.i + b] -= (this.learningRate * clippedValue) / Math.sqrt(this.vWeights[ma.i + b] + this.epsilon) + this.reguliser * this.dWeights[ma.i + b];
+					this.dWeights[ma.i + b] = 0;
 					
 				}
 				
@@ -111,21 +159,21 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		} else if (this.optimiser == Silicitect.adamOptimiser) {
 			
-			for (var a in this.network) {
+			for (var a in this.net) {
 				
-				var ma = this.network[a];
+				var ma = this.net[a];
 				
 				for (var b = 0; b < ma.l; b++) {
 					
-					var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, Matrix.dw[ma.i + b]));
+					var clippedValue = Math.max(-this.clipValue, Math.min(this.clipValue, this.dWeights[ma.i + b]));
 					
-					Matrix.mw[ma.i + b] = Matrix.mw[ma.i + b] * this.decayLinear + invDecayLinear * clippedValue;
-					Matrix.vw[ma.i + b] = Matrix.vw[ma.i + b] * this.decay + invDecay * Matrix.dw[ma.i + b] * Matrix.dw[ma.i + b];
+					this.mWeights[ma.i + b] = this.mWeights[ma.i + b] * this.decayLinear + invDecayLinear * clippedValue;
+					this.vWeights[ma.i + b] = this.vWeights[ma.i + b] * this.decay + invDecay * this.dWeights[ma.i + b] * this.dWeights[ma.i + b];
 					
-					Matrix.w[ma.i + b] -= (this.learningRate * (Matrix.mw[ma.i + b] / invDecayLinear)) /
-											(Math.sqrt((Matrix.vw[ma.i + b] / invDecay) + this.epsilon) + this.epsilon) +
-											this.reguliser * Matrix.dw[ma.i + b];
-					Matrix.dw[ma.i + b] = 0;
+					this.weights[ma.i + b] -= (this.learningRate * (this.mWeights[ma.i + b] / invDecayLinear)) /
+											(Math.sqrt((this.vWeights[ma.i + b] / invDecay) + this.epsilon) + this.epsilon) +
+											this.reguliser * this.dWeights[ma.i + b];
+					this.dWeights[ma.i + b] = 0;
 					
 				}
 				
@@ -140,25 +188,25 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Silicitect.prototype.flush = function () {
 		
-		for (var a = Matrix.c; a > this.networkMemory + 2; a--) {
+		for (var a = this.memCount; a > this.netMemory + 1; a--) {
 			
-			Matrix.w[a] = 0;
-			Matrix.dw[a] = 0;
+			this.weights[a] = 0;
+			this.dWeights[a] = 0;
 			
 		}
 		
-		Matrix.c = this.networkMemory + 1;
+		this.memCount = this.netMemory + 1;
 		
 	};
 	
 	Silicitect.prototype.computeLoss = function (lossTarget, desiredValues, squashFunction, lossFunction) {
 		
-		var squashed = squashFunction(this.network[lossTarget]);
+		var squashed = this[squashFunction](this.net[lossTarget]);
 		var sum = 0;
 		
 		for (var a = 0; a < squashed.l; a++) {
 			
-			Matrix.dw[this.network[lossTarget].i + a] = -1 * (Matrix.w[this.network[desiredValues].i + a] - Matrix.w[squashed.i + a]);
+			this.dWeights[this.net[lossTarget].i + a] = -1 * (this.weights[this.net[desiredValues].i + a] - this.weights[squashed.i + a]);
 			
 		}
 		
@@ -166,7 +214,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			for (var a = 0; a < squashed.l; a++) {
 				
-				sum += -Math.log(1e-10 + Math.abs(1 - Matrix.w[this.network[desiredValues].i + a] - Matrix.w[squashed.i + a]));
+				sum += -Math.log(1e-10 + Math.abs(1 - this.weights[this.net[desiredValues].i + a] - this.weights[squashed.i + a]));
 				
 			}
 			
@@ -174,7 +222,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			for (var a = 0; a < squashed.l; a++) {
 				
-				sum += Math.abs(Matrix.w[this.network[desiredValues].i + a] - Matrix.w[squashed.i + a]);
+				sum += Math.abs(this.weights[this.net[desiredValues].i + a] - this.weights[squashed.i + a]);
 				
 			}
 			
@@ -182,7 +230,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 			for (var a = 0; a < squashed.l; a++) {
 				
-				sum += Math.round(Math.abs(Matrix.w[this.network[desiredValues].i + a] - Matrix.w[squashed.i + a]));
+				sum += Math.round(Math.abs(this.weights[this.net[desiredValues].i + a] - this.weights[squashed.i + a]));
 				
 			}
 			
@@ -194,23 +242,53 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Random = {lossless:0, seed:0, nextGaussian:-1};
-	
-	Random.uniform = function () {
+	Silicitect.prototype.parseText = function (text, characterSet) {
 		
-		Random.lossless = (4321421413 * Random.lossless + 432194612 + Random.seed) % 43214241 * (79143569 + Random.seed);
+		this.text.raw = text;
+		this.text.charToIndex = {};
+		this.text.characterSet = characterSet ? characterSet : "";
 		
-		return 1e-10 * (Random.lossless % 1e10);
+		if (characterSet == Silicitect.predefinedCharacterSet) {
+			
+			this.text.characterSet = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t";
+			this.text.characterSet += "1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+			
+		}
+		
+		for (var a = 0; a < this.text.characterSet.length; a++) {
+			
+			this.text.charToIndex[this.text.characterSet.charAt(a)] = a;
+			
+		}
+		
+		for (var a = 0; a < this.text.raw.length; a++) {
+			
+			var char = this.text.raw.charAt(a);
+			
+			if (1 + this.text.charToIndex[char]) continue;
+			
+			this.text.charToIndex[char] = this.text.characterSet.length;
+			this.text.characterSet += char;
+			
+		}
 		
 	};
 	
-	Random.gaussian = function (mean, standardDeviation) {
+	Silicitect.prototype.randomUniform = function () {
 		
-		if (Random.nextGaussian != -1) {
+		this.random.lossless = (4321421413 * this.random.lossless + 432194612 + this.random.seed) % 43214241 * (79143569 + this.random.seed);
+		
+		return 1e-10 * (this.random.lossless % 1e10);
+		
+	};
+	
+	Silicitect.prototype.randomGaussian = function (mean, standardDeviation) {
+		
+		if (this.random.nextGaussian != -1) {
 			
-			var output = Random.nextGaussian;
+			var output = this.random.nextGaussian;
 			
-			Random.nextGaussian = -1;
+			this.random.nextGaussian = -1;
 			
 			return output;
 			
@@ -222,113 +300,75 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 		do {
 			
-			xa = 2 * Random.uniform() - 1;
-			xb = 2 * Random.uniform() - 1;
+			xa = 2 * this.randomUniform() - 1;
+			xb = 2 * this.randomUniform() - 1;
 			w = xa * xa + xb * xb;
 			
 		} while (w > 1);
 		
 		w = Math.sqrt((-2 * Math.log(w)) / w);
-		Random.nextGaussian = mean + xb * w * standardDeviation;
+		
+		this.random.nextGaussian = mean + xb * w * standardDeviation;
 		
 		return mean + xa * w * standardDeviation;
 		
 	};
 	
-	TextParser = function (text, characterSet) {
+	Silicitect.prototype.matrix = function (n, d) {
 		
-		this.text = text;
-		this.charToIndex = {};
-		this.chars = characterSet;
+		this.memCount += n * d;
 		
-		for (var a = 0; a < this.chars.length; a++) {
-			
-			this.charToIndex[this.chars.charAt(a)] = a;
-			
-		}
-		
-		for (var a = 0; a < this.text.length; a++) {
-			
-			var char = this.text.charAt(a);
-			
-			if (1 + this.charToIndex[char]) continue;
-			
-			this.charToIndex[char] = this.chars.length;
-			this.chars += char;
-			
-		}
+		return {n:n, d:d, l:n * d, i:this.memCount - n * d};
 		
 	};
 	
-	TextParser.predefinedCharacterSet = "!@#$%^&*()_+{}\":|?><~±§¡€£¢∞œŒ∑´®†¥øØπ∏¬˚∆åÅßΩéúíóáÉÚÍÓÁëüïöäËÜÏÖÄ™‹›ﬁﬂ‡°·—≈çÇ√-=[];',.\\/`µ≤≥„‰◊ˆ˜¯˘¿⁄\n\t";
-	TextParser.predefinedCharacterSet += "1234567890 ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-	
-	Matrix = function (n, d) {
+	Silicitect.prototype.matrixRandomiseUniform = function (ma) {
 		
-		this.n = n;
-		this.d = d;
-		this.l = n * d;
-		this.i = Matrix.c;
+		for (var a = 0; a < ma.l; a++) this.weights[ma.i + a] = this.randomUniform();
 		
-		Matrix.c += this.l;
+		return ma;
 		
 	};
 	
-	Matrix.c = 0;
-	Matrix.w = new Float64Array(1e7);
-	Matrix.dw = new Float64Array(1e7);
-	Matrix.vw = new Float64Array(1e7);
-	Matrix.mw = new Float64Array(1e7);
-	
-	Matrix.prototype.randomiseUniform = function () {
+	Silicitect.prototype.matrixRandomiseNormalised = function (ma) {
 		
-		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = Random.uniform();
+		for (var a = 0; a < ma.l; a++) this.weights[ma.i + a] = this.randomUniform() / Math.sqrt(ma.d);
 		
-		return this;
+		return ma;
 		
 	};
 	
-	Matrix.prototype.randomiseNormalised = function () {
+	Silicitect.prototype.matrixRandomiseGaussian = function (ma, median, standardDeviation) {
 		
-		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = Random.uniform() / Math.sqrt(this.d);
+		for (var a = 0; a < ma.l; a++) this.weights[ma.i + a] = this.randomGaussian(median, standardDeviation);
 		
-		return this;
-		
-	};
-	
-	Matrix.prototype.randomiseGaussian = function (median, standardDeviation) {
-		
-		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = Random.gaussian(median, standardDeviation);
-		
-		return this;
+		return ma;
 		
 	};
 	
-	Matrix.prototype.fill = function (valueA) {
+	Silicitect.prototype.matrixFill = function (ma, valueA) {
 		
-		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = valueA;
+		for (var a = 0; a < ma.l; a++) this.weights[ma.i + a] = valueA;
 		
-		return this;
-		
-	};
-	
-	Matrix.prototype.fillExcept = function (valueA, index, valueB) {
-		
-		for (var a = 0; a < this.l; a++) Matrix.w[this.i + a] = a == index ? valueB : valueA;
-		
-		return this;
+		return ma;
 		
 	};
 	
-	Matrix.silicitect = null;
-	
-	Matrix.scalar = function (ma, scale) {
+	Silicitect.prototype.matrixFillExcept = function (ma, valueA, index, valueB) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		for (var a = 0; a < ma.l; a++) this.weights[ma.i + a] = a == index ? valueB : valueA;
+		
+		return ma;
+		
+	};
+	
+	Silicitect.prototype.matrixScalar = function (ma, scale) {
+		
+		var out = this.matrix(ma.n, ma.d);
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[ma.i + a] *= scale;
+			this.weights[ma.i + a] *= scale;
 			
 		}
 		
@@ -336,45 +376,45 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Matrix.softmax = function (ma, temp) {
+	Silicitect.prototype.matrixSoftmax = function (ma, temp) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		var out = this.matrix(ma.n, ma.d);
 		var max = -1e10;
 		var sum = 0;
 		
 		if (temp) {
 			
-			for (var a = 0; a < ma.l; a++) Matrix.w[ma.i + a] /= temp;
+			for (var a = 0; a < ma.l; a++) this.weights[ma.i + a] /= temp;
 			
 		}
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			if (Matrix.w[ma.i + a] > max) max = Matrix.w[ma.i + a];
+			if (this.weights[ma.i + a] > max) max = this.weights[ma.i + a];
 			
 		}
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[out.i + a] = Math.exp(Matrix.w[ma.i + a] - max);
+			this.weights[out.i + a] = Math.exp(this.weights[ma.i + a] - max);
 			
-			sum += Matrix.w[out.i + a];
+			sum += this.weights[out.i + a];
 			
 		}
 		
-		for (var a = 0; a < ma.l; a++) Matrix.w[out.i + a] /= sum;
+		for (var a = 0; a < ma.l; a++) this.weights[out.i + a] /= sum;
 		
 		return out;
 		
 	};
 	
-	Matrix.sampleMax = function (ma) {
+	Silicitect.prototype.matrixSampleMax = function (ma) {
 		
 		var highest = 0;
 		
 		for (var a = 1; a < ma.l; a++) {
 			
-			if (Matrix.w[ma.i + a] > ma.w[highest]) highest = a;
+			if (this.weights[ma.i + a] > this.weights[ma.i + highest]) highest = a;
 			
 		}
 		
@@ -382,14 +422,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Matrix.sampleRandomSum = function (ma) {
+	Silicitect.prototype.matrixSampleRandomSum = function (ma) {
 		
-		var random = Math.random();
+		var random = this.randomUniform();
 		var sum = 0;
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			sum += Matrix.w[ma.i + a];
+			sum += this.weights[ma.i + a];
 			
 			if (sum > random) return a;
 			
@@ -399,13 +439,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Matrix.invert = function (ma) {
+	Silicitect.prototype.matrixInvert = function (ma) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		var out = this.matrix(ma.n, ma.d);
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[out.i + a] = 1 - Matrix.w[ma.i + a];
+			this.weights[out.i + a] = 1 - this.weights[ma.i + a];
 			
 		}
 		
@@ -413,13 +453,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Matrix.nothing = function (ma) {
+	Silicitect.prototype.matrixClone = function (ma) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		var out = this.matrix(ma.n, ma.d);
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[out.i + a] = Matrix.w[ma.i + a];
+			this.weights[out.i + a] = this.weights[ma.i + a];
 			
 		}
 		
@@ -427,19 +467,19 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Matrix.multiply = function (ma, mb) {
+	Silicitect.prototype.matrixMultiply = function (ma, mb) {
 		
-		var out = new Matrix(ma.n, mb.d);
+		var out = this.matrix(ma.n, mb.d);
 		
 		for (var a = 0; a < ma.n; a++) {
 			
 			for (var b = 0; b < mb.d; b++) {
 				
-				Matrix.w[out.i + mb.d * a + b] = 0;
+				this.weights[out.i + mb.d * a + b] = 0;
 				
 				for (var c = 0; c < ma.d; c++) {
 					
-					Matrix.w[out.i + mb.d * a + b] += Matrix.w[ma.i + ma.d * a + c] * Matrix.w[mb.i + mb.d * c + b];
+					this.weights[out.i + mb.d * a + b] += this.weights[ma.i + ma.d * a + c] * this.weights[mb.i + mb.d * c + b];
 					
 				}
 				
@@ -447,13 +487,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.multiplyBackward, [ma, mb, out]);
+		if (this.recordBackprop) this.backprop.push("matrixMultiplyBackward", [ma, mb, out]);
 		
 		return out;
 		
 	};
 	
-	Matrix.multiplyBackward = function (ma, mb, out) {
+	Silicitect.prototype.matrixMultiplyBackward = function (ma, mb, out) {
 		
 		for (var a = 0; a < ma.n; a++) {
 			
@@ -461,8 +501,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 				
 				for (var c = 0; c < ma.d; c++) {
 					
-					Matrix.dw[ma.i + ma.d * a + c] += Matrix.w[mb.i + mb.d * c + b] * Matrix.dw[out.i + mb.d * a + b];
-					Matrix.dw[mb.i + mb.d * c + b] += Matrix.w[ma.i + ma.d * a + c] * Matrix.dw[out.i + mb.d * a + b];
+					this.dWeights[ma.i + ma.d * a + c] += this.weights[mb.i + mb.d * c + b] * this.dWeights[out.i + mb.d * a + b];
+					this.dWeights[mb.i + mb.d * c + b] += this.weights[ma.i + ma.d * a + c] * this.dWeights[out.i + mb.d * a + b];
 					
 				}
 				
@@ -472,133 +512,133 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Matrix.elementMultiply = function (ma, mb) {
+	Silicitect.prototype.matrixElementMultiply = function (ma, mb) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		var out = this.matrix(ma.n, ma.d);
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[out.i + a] = Matrix.w[ma.i + a] * Matrix.w[mb.i + a];
+			this.weights[out.i + a] = this.weights[ma.i + a] * this.weights[mb.i + a];
 			
 		}
 		
-		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.elementMultiplyBackward, [ma, mb, out]);
+		if (this.recordBackprop) this.backprop.push("matrixElementMultiplyBackward", [ma, mb, out]);
 		
 		return out;
 		
 	};
 	
-	Matrix.elementMultiplyBackward = function (ma, mb, out) {
+	Silicitect.prototype.matrixElementMultiplyBackward = function (ma, mb, out) {
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.dw[ma.i + a] += Matrix.w[mb.i + a] * Matrix.dw[out.i + a];
-			Matrix.dw[mb.i + a] += Matrix.w[ma.i + a] * Matrix.dw[out.i + a];
+			this.dWeights[ma.i + a] += this.weights[mb.i + a] * this.dWeights[out.i + a];
+			this.dWeights[mb.i + a] += this.weights[ma.i + a] * this.dWeights[out.i + a];
 			
 		}
 		
 	};
 	
-	Matrix.add = function (ma, mb) {
+	Silicitect.prototype.matrixAdd = function (ma, mb) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		var out = this.matrix(ma.n, ma.d);
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[out.i + a] = Matrix.w[ma.i + a] + Matrix.w[mb.i + a];
+			this.weights[out.i + a] = this.weights[ma.i + a] + this.weights[mb.i + a];
 			
 		}
 		
-		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.addBackward, [ma, mb, out]);
+		if (this.recordBackprop) this.backprop.push("matrixAddBackward", [ma, mb, out]);
 		
 		return out;
 		
 	};
 	
-	Matrix.addBackward = function (ma, mb, out) {
+	Silicitect.prototype.matrixAddBackward = function (ma, mb, out) {
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.dw[ma.i + a] += Matrix.dw[out.i + a];
-			Matrix.dw[mb.i + a] += Matrix.dw[out.i + a];
+			this.dWeights[ma.i + a] += this.dWeights[out.i + a];
+			this.dWeights[mb.i + a] += this.dWeights[out.i + a];
 			
 		}
 		
 	};
 	
-	Matrix.sigmoid = function (ma) {
+	Silicitect.prototype.matrixSigmoid = function (ma) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		var out = this.matrix(ma.n, ma.d);
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[out.i + a] = 1 / (1 + Math.exp(-Matrix.w[ma.i + a]));
+			this.weights[out.i + a] = 1 / (1 + Math.exp(-this.weights[ma.i + a]));
 			
 		}
 		
-		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.sigmoidBackward, [ma, out]);
+		if (this.recordBackprop) this.backprop.push("matrixSigmoidBackward", [ma, out]);
 		
 		return out;
 		
 	};
 	
-	Matrix.sigmoidBackward = function (ma, out) {
+	Silicitect.prototype.matrixSigmoidBackward = function (ma, out) {
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.dw[ma.i + a] += Matrix.w[out.i + a] * (1 - Matrix.w[out.i + a]) * Matrix.dw[out.i + a];
+			this.dWeights[ma.i + a] += this.weights[out.i + a] * (1 - this.weights[out.i + a]) * this.dWeights[out.i + a];
 			
 		}
 		
 	};
 	
-	Matrix.rectifiedLinear = function (ma) {
+	Silicitect.prototype.matrixRectifiedLinear = function (ma) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		var out = this.matrix(ma.n, ma.d);
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[out.i + a] = Math.max(0, Matrix.w[ma.i + a]);
+			this.weights[out.i + a] = Math.max(0, this.weights[ma.i + a]);
 			
 		}
 		
-		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.rectifiedLinearBackward, [ma, out]);
+		if (this.recordBackprop) this.backprop.push("matrixRectifiedLinearBackward", [ma, out]);
 		
 		return out;
 		
 	};
 	
-	Matrix.rectifiedLinearBackward = function (ma, out) {
+	Silicitect.prototype.matrixRectifiedLinearBackward = function (ma, out) {
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.dw[ma.i + a] += Matrix.w[ma.i + a] > 0 ? Matrix.dw[out.i + a] : 0;
+			this.dWeights[ma.i + a] += this.weights[ma.i + a] > 0 ? this.dWeights[out.i + a] : 0;
 			
 		}
 		
 	};
 	
-	Matrix.hyperbolicTangent = function (ma) {
+	Silicitect.prototype.matrixHyperbolicTangent = function (ma) {
 		
-		var out = new Matrix(ma.n, ma.d);
+		var out = this.matrix(ma.n, ma.d);
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.w[out.i + a] = Math.tanh(Matrix.w[ma.i + a]);
+			this.weights[out.i + a] = Math.tanh(this.weights[ma.i + a]);
 			
 		}
 		
-		if (Matrix.silicitect.recordBackprop) Matrix.silicitect.backprop.push(Matrix.hyperbolicTangentBackward, [ma, out]);
+		if (this.recordBackprop) this.backprop.push("matrixHyperbolicTangentBackward", [ma, out]);
 		
 		return out;
 		
 	};
 	
-	Matrix.hyperbolicTangentBackward = function (ma, out) {
+	Silicitect.prototype.matrixHyperbolicTangentBackward = function (ma, out) {
 		
 		for (var a = 0; a < ma.l; a++) {
 			
-			Matrix.dw[ma.i + a] += (1 - Matrix.w[out.i + a] * Matrix.w[out.i + a]) * Matrix.dw[out.i + a];
+			this.dWeights[ma.i + a] += (1 - this.weights[out.i + a] * this.weights[out.i + a]) * this.dWeights[out.i + a];
 			
 		}
 		
