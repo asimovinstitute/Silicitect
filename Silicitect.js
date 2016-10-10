@@ -18,7 +18,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	var enumator = 0;
 	
-	Silicitect = function (initialiser, updater) {
+	Silicitect = function () {
 		
 		this.reguliser = 1e-8;
 		this.learningRate = 0.001;
@@ -33,8 +33,6 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		this.backprop = [];
 		this.net = {};
 		this.recordBackprop = false;
-		this.initialise = initialiser;
-		this.update = updater;
 		
 		this.text = {};
 		this.text.raw = "";
@@ -59,7 +57,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		
 	};
 	
-	Silicitect.prototype.init = function (memory) {
+	Silicitect.prototype.init = function (initialiser, memory) {
 		
 		memory = memory ? memory : 1e7;
 		
@@ -69,7 +67,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 		this.vWeights = new Float64Array(memory);
 		this.mWeights = new Float64Array(memory);
 		
-		this.initialise();
+		initialiser();
 		
 		this.netMemory = this.memCount;
 		
@@ -83,6 +81,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	Silicitect.adamOptimiser = enumator++;
 	
 	Silicitect.predefinedCharacterSet = enumator++;
+	
+	Silicitect.matrixMultiplyID = enumator++;
+	Silicitect.matrixElementMultiplyID = enumator++;
+	Silicitect.matrixAddID = enumator++;
+	Silicitect.matrixSigmoidID = enumator++;
+	Silicitect.matrixRectifiedLinearID = enumator++;
+	Silicitect.matrixHyperbolicTangentID = enumator++;
 	
 	Silicitect.prototype.startLearningSession = function () {
 		
@@ -127,11 +132,48 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 	
 	Silicitect.prototype.backpropagate = function () {
 		
-		for (var a = this.backprop.length - 1; a > -1; a -= 2) {
+		for (var a = this.backprop.length - 1; a > -1; a--) {
 			
-			if (this.backprop[a].length == 1) this[this.backprop[a - 1]](this.backprop[a][0]);
-			if (this.backprop[a].length == 2) this[this.backprop[a - 1]](this.backprop[a][0], this.backprop[a][1]);
-			if (this.backprop[a].length == 3) this[this.backprop[a - 1]](this.backprop[a][0], this.backprop[a][1], this.backprop[a][2]);
+			if (this.backprop[a] == Silicitect.matrixMultiplyID) {
+				
+				this.matrixMultiplyBackward(this.backprop[a - 3], this.backprop[a - 2], this.backprop[a - 1]);
+				
+				a -= 3;
+				
+			} else if (this.backprop[a] == Silicitect.matrixElementMultiplyID) {
+				
+				this.matrixElementMultiplyBackward(this.backprop[a - 3], this.backprop[a - 2], this.backprop[a - 1]);
+				
+				a -= 3;
+				
+			} else if (this.backprop[a] == Silicitect.matrixAddID) {
+				
+				this.matrixAddBackward(this.backprop[a - 3], this.backprop[a - 2], this.backprop[a - 1]);
+				
+				a -= 3;
+				
+			} else if (this.backprop[a] == Silicitect.matrixSigmoidID) {
+				
+				this.matrixSigmoidBackward(this.backprop[a - 2], this.backprop[a - 1]);
+				
+				a -= 2;
+				
+			} else if (this.backprop[a] == Silicitect.matrixRectifiedLinearID) {
+				
+				this.matrixRectifiedLinearBackward(this.backprop[a - 2], this.backprop[a - 1]);
+				
+				a -= 2;
+				
+			} else if (this.backprop[a] == Silicitect.matrixHyperbolicTangentID) {
+				
+				this.matrixHyperbolicTangentBackward(this.backprop[a - 2], this.backprop[a - 1]);
+				
+				a -= 2;
+				
+			} else {
+				console.log(this.backprop[a]);
+				return;
+			}
 			
 		}
 		
@@ -487,7 +529,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		if (this.recordBackprop) this.backprop.push("matrixMultiplyBackward", [ma, mb, out]);
+		if (this.recordBackprop) this.backprop.push(ma, mb, out, Silicitect.matrixMultiplyID);
 		
 		return out;
 		
@@ -522,7 +564,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		if (this.recordBackprop) this.backprop.push("matrixElementMultiplyBackward", [ma, mb, out]);
+		if (this.recordBackprop) this.backprop.push(ma, mb, out, Silicitect.matrixElementMultiplyID);
 		
 		return out;
 		
@@ -549,7 +591,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		if (this.recordBackprop) this.backprop.push("matrixAddBackward", [ma, mb, out]);
+		if (this.recordBackprop) this.backprop.push(ma, mb, out, Silicitect.matrixAddID);
 		
 		return out;
 		
@@ -576,7 +618,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		if (this.recordBackprop) this.backprop.push("matrixSigmoidBackward", [ma, out]);
+		if (this.recordBackprop) this.backprop.push(ma, out, Silicitect.matrixSigmoidID);
 		
 		return out;
 		
@@ -602,7 +644,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		if (this.recordBackprop) this.backprop.push("matrixRectifiedLinearBackward", [ma, out]);
+		if (this.recordBackprop) this.backprop.push(ma, out, Silicitect.matrixRectifiedLinearID);
 		
 		return out;
 		
@@ -628,7 +670,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>*/
 			
 		}
 		
-		if (this.recordBackprop) this.backprop.push("matrixHyperbolicTangentBackward", [ma, out]);
+		if (this.recordBackprop) this.backprop.push(ma, out, Silicitect.matrixHyperbolicTangentID);
 		
 		return out;
 		
